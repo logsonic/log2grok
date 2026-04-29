@@ -1,1 +1,1 @@
-\{%{GREEDYDATA:json}\}
+\{\s*"t"\s*:\s*%{DATA:t}\s*,\s*"s"\s*:\s*%{QUOTEDSTRING:s}\s*,\s*"c"\s*:\s*%{QUOTEDSTRING:c}\s*,\s*"id"\s*:\s*%{NUMBER:id}\s*,\s*"ctx"\s*:\s*%{QUOTEDSTRING:ctx}\s*,\s*"msg"\s*:\s*%{QUOTEDSTRING:message}\s*\}

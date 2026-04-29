@@ -1,1 +1,1 @@
-\{%{GREEDYDATA:json}\}
+\{\s*"authorization"\s*:\s*%{DATA:authorization}\s*,\s*"caller"\s*:\s*%{QUOTEDSTRING:caller}\s*,\s*"eventTimestamp"\s*:\s*%{QUOTEDSTRING:eventtimestamp}\s*,\s*"level"\s*:\s*%{QUOTEDSTRING:level}\s*,\s*"operationName"\s*:\s*%{QUOTEDSTRING:operationname}\s*,\s*"resourceGroupName"\s*:\s*%{QUOTEDSTRING:resourcegroupname}\s*,\s*"status"\s*:\s*%{QUOTEDSTRING:status}\s*\}

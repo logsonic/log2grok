@@ -1,0 +1,699 @@
+package pattern
+
+import (
+	"encoding/csv"
+	"encoding/json"
+	"regexp"
+	"sort"
+	"strings"
+)
+
+type structuredProbe struct {
+	Name   string
+	Likely func(sample []string) bool
+	Render func(sample []string) (grok string, source string, ok bool)
+}
+
+var structuredProbes = []structuredProbe{
+	dockerJSONProbe,
+	pinoJSONProbe,
+	bunyanJSONProbe,
+	zapJSONProbe,
+	ecsJSONProbe,
+	cloudTrailJSONProbe,
+	suricataEVEProbe,
+	kubernetesAuditJSONProbe,
+	auditdJSONProbe,
+	vaultAuditJSONProbe,
+	jsonProbe,
+	logfmtProbe,
+	cefProbe,
+	leefProbe,
+	w3cIISProbe,
+	csvProbe,
+	tsvProbe,
+}
+
+// ---------- helpers ----------
+
+func parseJSONLine(line string) (map[string]any, bool) {
+	line = strings.TrimSpace(line)
+	if !strings.HasPrefix(line, "{") || !strings.HasSuffix(line, "}") {
+		return nil, false
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(line), &m); err != nil {
+		return nil, false
+	}
+	return m, true
+}
+
+func jsonObjectFraction(sample []string) float64 {
+	if len(sample) == 0 {
+		return 0
+	}
+	hits := 0
+	for _, line := range sample {
+		if _, ok := parseJSONLine(line); ok {
+			hits++
+		}
+	}
+	return float64(hits) / float64(len(sample))
+}
+
+func keyFreq(sample []string) (count int, freq map[string]int) {
+	freq = make(map[string]int)
+	for _, line := range sample {
+		obj, ok := parseJSONLine(line)
+		if !ok {
+			continue
+		}
+		count++
+		for k := range obj {
+			freq[k]++
+		}
+	}
+	return count, freq
+}
+
+func hasKeysAtFraction(freq map[string]int, total int, frac float64, keys ...string) bool {
+	if total == 0 {
+		return false
+	}
+	threshold := float64(total) * frac
+	for _, k := range keys {
+		if float64(freq[k]) < threshold {
+			return false
+		}
+	}
+	return true
+}
+
+type jsonShape struct {
+	Count     int
+	KeyFreq   map[string]int
+	TypeFreq  map[string]map[string]int
+	FirstKeys []string
+}
+
+func observeJSONShape(sample []string) jsonShape {
+	shape := jsonShape{
+		KeyFreq:  make(map[string]int),
+		TypeFreq: make(map[string]map[string]int),
+	}
+	for _, line := range sample {
+		obj, ok := parseJSONLine(line)
+		if !ok {
+			continue
+		}
+		shape.Count++
+		if len(shape.FirstKeys) == 0 {
+			shape.FirstKeys = orderedJSONKeys(strings.TrimSpace(line))
+		}
+		for key, value := range obj {
+			shape.KeyFreq[key]++
+			if shape.TypeFreq[key] == nil {
+				shape.TypeFreq[key] = make(map[string]int)
+			}
+			shape.TypeFreq[key][jsonValueKind(value)]++
+		}
+	}
+	return shape
+}
+
+func orderedJSONKeys(line string) []string {
+	dec := json.NewDecoder(strings.NewReader(line))
+	tok, err := dec.Token()
+	if err != nil || tok != json.Delim('{') {
+		return nil
+	}
+	keys := make([]string, 0, 16)
+	for dec.More() {
+		tok, err := dec.Token()
+		if err != nil {
+			return keys
+		}
+		key, ok := tok.(string)
+		if !ok {
+			return keys
+		}
+		keys = append(keys, key)
+		var discard any
+		if err := dec.Decode(&discard); err != nil {
+			return keys
+		}
+	}
+	return keys
+}
+
+func commonJSONKeys(shape jsonShape, minFreq float64) []string {
+	if shape.Count == 0 {
+		return nil
+	}
+	common := make(map[string]bool)
+	for key, count := range shape.KeyFreq {
+		if float64(count)/float64(shape.Count) >= minFreq {
+			common[key] = true
+		}
+	}
+	out := make([]string, 0, len(common))
+	seen := make(map[string]bool, len(common))
+	for _, key := range shape.FirstKeys {
+		if common[key] {
+			out = append(out, key)
+			seen[key] = true
+		}
+	}
+	rest := make([]string, 0, len(common)-len(out))
+	for key := range common {
+		if !seen[key] {
+			rest = append(rest, key)
+		}
+	}
+	sort.Strings(rest)
+	return append(out, rest...)
+}
+
+func jsonValueKind(v any) string {
+	switch v.(type) {
+	case string:
+		return "string"
+	case float64:
+		return "number"
+	case bool:
+		return "bool"
+	case nil:
+		return "null"
+	default:
+		return "complex"
+	}
+}
+
+func dominantJSONKind(shape jsonShape, key string) string {
+	bestKind, bestCount := "string", 0
+	for kind, count := range shape.TypeFreq[key] {
+		if count > bestCount {
+			bestKind, bestCount = kind, count
+		}
+	}
+	return bestKind
+}
+
+func renderJSONSkeleton(sample []string, source string) (string, string, bool) {
+	shape := observeJSONShape(sample)
+	keys := commonJSONKeys(shape, 0.80)
+	if len(keys) == 0 {
+		return `\{%{GREEDYDATA:json}\}`, source, true
+	}
+	common := make(map[string]bool, len(keys))
+	for _, key := range keys {
+		common[key] = true
+	}
+	hasExtra := false
+	for key := range shape.KeyFreq {
+		if !common[key] {
+			hasExtra = true
+			break
+		}
+	}
+
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		field := canonicalJSONFieldName(key)
+		parts = append(parts, `"`+regexp.QuoteMeta(key)+`"\s*:\s*`+jsonValueGrok(field, dominantJSONKind(shape, key)))
+	}
+	grok := `\{\s*` + strings.Join(parts, `\s*,\s*`)
+	if hasExtra {
+		grok += `(?:\s*,\s*%{GREEDYDATA:json_extra})?`
+	}
+	grok += `\s*\}`
+	return grok, source, true
+}
+
+func canonicalJSONFieldName(key string) string {
+	switch key {
+	case "@timestamp", "time", "timestamp", "ts", "eventTime":
+		return "timestamp"
+	case "level", "severity", "log.level", "levelname":
+		return "level"
+	case "message", "msg", "log":
+		return "message"
+	case "logger", "logger_name", "name":
+		return "logger"
+	case "trace_id", "traceId", "traceid", "trace.id":
+		return "trace_id"
+	case "span_id", "spanId", "spanid", "span.id":
+		return "span_id"
+	case "request_id", "requestId", "requestid", "request.id":
+		return "request_id"
+	case "client_ip", "clientIp", "clientip", "src_ip", "source.ip":
+		return "client_ip"
+	case "method", "http_method", "httpMethod", "verb", "http.request.method":
+		return "method"
+	case "path", "url", "uri", "request_uri", "http.target":
+		return "path"
+	case "status", "status_code", "statusCode", "http.response.status_code":
+		return "status"
+	case "duration", "latency", "response_time", "responseTime", "dur", "event.duration":
+		return "duration"
+	}
+	repl := strings.NewReplacer(".", "_", "-", "_", "@", "", "/", "_")
+	name := canonicalName(repl.Replace(key))
+	if !isValidName(name) {
+		name = "field_" + strings.TrimLeft(name, "_")
+	}
+	if !isValidName(name) {
+		return "field"
+	}
+	return name
+}
+
+func jsonValueGrok(field, kind string) string {
+	switch kind {
+	case "number":
+		return "%{NUMBER:" + field + "}"
+	case "bool":
+		return "%{BOOLEAN:" + field + "}"
+	case "null", "complex":
+		return "%{DATA:" + field + "}"
+	default:
+		return "%{QUOTEDSTRING:" + field + "}"
+	}
+}
+
+// ---------- generic JSON probe ----------
+
+var jsonProbe = structuredProbe{
+	Name:   "JSON Object",
+	Likely: func(sample []string) bool { return jsonObjectFraction(sample) >= 0.90 },
+	Render: func(sample []string) (string, string, bool) {
+		return renderJSONSkeleton(sample, "structured:JSON Object")
+	},
+}
+
+// ---------- Docker JSON ----------
+
+var dockerJSONProbe = structuredProbe{
+	Name: "Docker JSON",
+	Likely: func(sample []string) bool {
+		total, freq := keyFreq(sample)
+		return total > 0 && hasKeysAtFraction(freq, total, 0.80, "log", "stream", "time")
+	},
+	Render: func(sample []string) (string, string, bool) {
+		return renderJSONSkeleton(sample, "structured:Docker JSON")
+	},
+}
+
+// ---------- Pino ----------
+
+var pinoJSONProbe = structuredProbe{
+	Name: "Pino JSON",
+	Likely: func(sample []string) bool {
+		total, freq := keyFreq(sample)
+		return total > 0 && hasKeysAtFraction(freq, total, 0.80, "level", "time", "msg")
+	},
+	Render: func(sample []string) (string, string, bool) {
+		return renderJSONSkeleton(sample, "structured:Pino JSON")
+	},
+}
+
+// ---------- Bunyan ----------
+
+var bunyanJSONProbe = structuredProbe{
+	Name: "Bunyan JSON",
+	Likely: func(sample []string) bool {
+		total, freq := keyFreq(sample)
+		return total > 0 && hasKeysAtFraction(freq, total, 0.80, "name", "level", "time", "msg")
+	},
+	Render: func(sample []string) (string, string, bool) {
+		return renderJSONSkeleton(sample, "structured:Bunyan JSON")
+	},
+}
+
+// ---------- Zap ----------
+
+var zapJSONProbe = structuredProbe{
+	Name: "Zap JSON",
+	Likely: func(sample []string) bool {
+		total, freq := keyFreq(sample)
+		if total == 0 {
+			return false
+		}
+		hasTS := freq["ts"] > 0 || freq["timestamp"] > 0
+		return hasTS && hasKeysAtFraction(freq, total, 0.80, "level", "msg")
+	},
+	Render: func(sample []string) (string, string, bool) {
+		return renderJSONSkeleton(sample, "structured:Zap JSON")
+	},
+}
+
+// ---------- ECS JSON ----------
+
+var ecsJSONProbe = structuredProbe{
+	Name: "ECS JSON",
+	Likely: func(sample []string) bool {
+		total, freq := keyFreq(sample)
+		if total == 0 {
+			return false
+		}
+		return freq["@timestamp"]*100/total >= 80 && (freq["log.level"] > 0 || freq["ecs.version"] > 0)
+	},
+	Render: func(sample []string) (string, string, bool) {
+		return renderJSONSkeleton(sample, "structured:ECS JSON")
+	},
+}
+
+// ---------- CloudTrail JSON ----------
+
+var cloudTrailJSONProbe = structuredProbe{
+	Name: "CloudTrail JSON",
+	Likely: func(sample []string) bool {
+		total, freq := keyFreq(sample)
+		if total == 0 {
+			return false
+		}
+		return hasKeysAtFraction(freq, total, 0.80, "eventVersion", "eventTime", "eventSource", "eventName")
+	},
+	Render: func(sample []string) (string, string, bool) {
+		return renderJSONSkeleton(sample, "structured:CloudTrail JSON")
+	},
+}
+
+// ---------- Suricata EVE JSON ----------
+
+var suricataEVEProbe = structuredProbe{
+	Name: "Suricata EVE",
+	Likely: func(sample []string) bool {
+		total, freq := keyFreq(sample)
+		if total == 0 {
+			return false
+		}
+		return hasKeysAtFraction(freq, total, 0.80, "timestamp", "event_type", "src_ip")
+	},
+	Render: func(sample []string) (string, string, bool) {
+		return renderJSONSkeleton(sample, "structured:Suricata EVE")
+	},
+}
+
+// ---------- Kubernetes audit JSON ----------
+
+var kubernetesAuditJSONProbe = structuredProbe{
+	Name: "Kubernetes Audit JSON",
+	Likely: func(sample []string) bool {
+		total, freq := keyFreq(sample)
+		if total == 0 {
+			return false
+		}
+		return freq["kind"]*100/total >= 80 && hasKeysAtFraction(freq, total, 0.80, "auditID", "stage", "verb")
+	},
+	Render: func(sample []string) (string, string, bool) {
+		return renderJSONSkeleton(sample, "structured:Kubernetes Audit JSON")
+	},
+}
+
+// ---------- auditd JSON ----------
+
+var auditdJSONProbe = structuredProbe{
+	Name: "auditd JSON",
+	Likely: func(sample []string) bool {
+		total, freq := keyFreq(sample)
+		if total == 0 {
+			return false
+		}
+		return hasKeysAtFraction(freq, total, 0.80, "type", "msg") &&
+			(freq["audit_type"] > 0 || freq["auid"] > 0 || freq["ses"] > 0 || freq["uid"] > 0)
+	},
+	Render: func(sample []string) (string, string, bool) {
+		return renderJSONSkeleton(sample, "structured:auditd JSON")
+	},
+}
+
+// ---------- Vault audit JSON ----------
+
+var vaultAuditJSONProbe = structuredProbe{
+	Name: "Vault Audit JSON",
+	Likely: func(sample []string) bool {
+		total, freq := keyFreq(sample)
+		if total == 0 {
+			return false
+		}
+		return hasKeysAtFraction(freq, total, 0.80, "time", "type") &&
+			(freq["auth"] > 0 || freq["request"] > 0 || freq["response"] > 0)
+	},
+	Render: func(sample []string) (string, string, bool) {
+		return renderJSONSkeleton(sample, "structured:Vault Audit JSON")
+	},
+}
+
+// ---------- logfmt ----------
+
+var logfmtProbe = structuredProbe{
+	Name:   "logfmt",
+	Likely: looksLikeLogfmt,
+	Render: func(sample []string) (string, string, bool) {
+		return `%{GREEDYDATA:kvpairs}`, "structured:logfmt", true
+	},
+}
+
+func looksLikeLogfmt(sample []string) bool {
+	if len(sample) == 0 {
+		return false
+	}
+	hits := 0
+	for _, line := range sample {
+		if logfmtFraction(line) >= 0.70 {
+			hits++
+		}
+	}
+	return float64(hits)/float64(len(sample)) >= 0.80
+}
+
+func logfmtFraction(line string) float64 {
+	tokens := strings.Fields(line)
+	if len(tokens) == 0 {
+		return 0
+	}
+	kv := 0
+	for _, t := range tokens {
+		if i := strings.IndexByte(t, '='); i > 0 && i < len(t)-1 {
+			head := t[:i]
+			if isValidName(head) {
+				kv++
+			}
+		}
+	}
+	return float64(kv) / float64(len(tokens))
+}
+
+// ---------- CEF ----------
+
+var cefProbe = structuredProbe{
+	Name: "CEF",
+	Likely: func(sample []string) bool {
+		hits := 0
+		for _, line := range sample {
+			if strings.Contains(line, "CEF:") && strings.Count(line, "|") >= 7 {
+				hits++
+			}
+		}
+		return len(sample) > 0 && float64(hits)/float64(len(sample)) >= 0.85
+	},
+	Render: func(sample []string) (string, string, bool) {
+		return `(?:%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} )?CEF:%{INT:cef_version}\|%{DATA:vendor}\|%{DATA:product}\|%{DATA:product_version}\|%{DATA:signature}\|%{DATA:name}\|%{DATA:severity}\|%{GREEDYDATA:extensions}`,
+			"structured:CEF", true
+	},
+}
+
+// ---------- LEEF ----------
+
+var leefProbe = structuredProbe{
+	Name: "LEEF",
+	Likely: func(sample []string) bool {
+		hits := 0
+		for _, line := range sample {
+			if strings.Contains(line, "LEEF:") && strings.Count(line, "|") >= 4 {
+				hits++
+			}
+		}
+		return len(sample) > 0 && float64(hits)/float64(len(sample)) >= 0.85
+	},
+	Render: func(sample []string) (string, string, bool) {
+		return `LEEF:%{NOTSPACE:leef_version}\|%{DATA:vendor}\|%{DATA:product}\|%{DATA:product_version}\|%{DATA:event_id}\|%{GREEDYDATA:extensions}`,
+			"structured:LEEF", true
+	},
+}
+
+// ---------- W3C / IIS ----------
+
+var w3cIISProbe = structuredProbe{
+	Name:   "W3C IIS",
+	Likely: looksLikeW3C,
+	Render: renderW3C,
+}
+
+func looksLikeW3C(sample []string) bool {
+	for _, line := range sample {
+		if strings.HasPrefix(line, "#Fields:") {
+			return true
+		}
+	}
+	return false
+}
+
+func renderW3C(sample []string) (string, string, bool) {
+	fieldsLine := ""
+	for _, line := range sample {
+		if strings.HasPrefix(line, "#Fields:") {
+			fieldsLine = line
+		}
+	}
+	if fieldsLine == "" {
+		return "", "", false
+	}
+	rest := strings.TrimSpace(strings.TrimPrefix(fieldsLine, "#Fields:"))
+	cols := strings.Fields(rest)
+	if len(cols) == 0 {
+		return "", "", false
+	}
+	parts := make([]string, 0, len(cols)*2)
+	for i, col := range cols {
+		if i > 0 {
+			parts = append(parts, " ")
+		}
+		parts = append(parts, w3cColumnGrok(col))
+	}
+	return strings.Join(parts, ""), "structured:W3C IIS", true
+}
+
+func w3cColumnGrok(col string) string {
+	name := canonicalName(strings.ReplaceAll(col, "-", "_"))
+	if !isValidName(name) {
+		name = "field"
+	}
+	switch col {
+	case "date":
+		return "%{DATE:" + name + "}"
+	case "time":
+		return "%{TIME:" + name + "}"
+	case "c-ip", "s-ip":
+		return "%{IP:" + name + "}"
+	case "sc-status", "sc-substatus", "sc-win32-status", "sc-bytes", "cs-bytes", "time-taken":
+		return "%{INT:" + name + "}"
+	case "cs-method":
+		return "%{WORD:" + name + "}"
+	default:
+		return "%{NOTSPACE:" + name + "}"
+	}
+}
+
+// ---------- CSV / TSV ----------
+
+var csvProbe = structuredProbe{
+	Name:   "CSV",
+	Likely: func(sample []string) bool { return looksLikeDelim(sample, ',') },
+	Render: func(sample []string) (string, string, bool) { return renderDelim(sample, ',', "structured:CSV") },
+}
+
+var tsvProbe = structuredProbe{
+	Name:   "TSV",
+	Likely: func(sample []string) bool { return looksLikeDelim(sample, '\t') },
+	Render: func(sample []string) (string, string, bool) { return renderDelim(sample, '\t', "structured:TSV") },
+}
+
+func looksLikeDelim(sample []string, delim rune) bool {
+	if len(sample) < 2 {
+		return false
+	}
+	rdr := csv.NewReader(strings.NewReader(strings.Join(sample, "\n")))
+	rdr.Comma = delim
+	rdr.FieldsPerRecord = -1
+	rdr.LazyQuotes = true
+	counts := make(map[int]int)
+	rows := 0
+	for {
+		rec, err := rdr.Read()
+		if err != nil {
+			break
+		}
+		rows++
+		counts[len(rec)]++
+		if rows >= 256 {
+			break
+		}
+	}
+	if rows == 0 {
+		return false
+	}
+	bestCount, bestN := 0, 0
+	for n, c := range counts {
+		if c > bestCount {
+			bestCount = c
+			bestN = n
+		}
+	}
+	if bestN < 3 {
+		return false
+	}
+	return float64(bestCount)/float64(rows) >= 0.95
+}
+
+func renderDelim(sample []string, delim rune, source string) (string, string, bool) {
+	rdr := csv.NewReader(strings.NewReader(strings.Join(sample, "\n")))
+	rdr.Comma = delim
+	rdr.FieldsPerRecord = -1
+	rdr.LazyQuotes = true
+	rows := make([][]string, 0, len(sample))
+	for {
+		rec, err := rdr.Read()
+		if err != nil {
+			break
+		}
+		rows = append(rows, rec)
+		if len(rows) >= 256 {
+			break
+		}
+	}
+	if len(rows) == 0 {
+		return "", "", false
+	}
+	counts := make(map[int]int)
+	for _, r := range rows {
+		counts[len(r)]++
+	}
+	var bestN, bestC int
+	for n, c := range counts {
+		if c > bestC {
+			bestC = c
+			bestN = n
+		}
+	}
+	if bestN < 3 {
+		return "", "", false
+	}
+	colExpr := `(?:"(?:""|[^"])*"|[^,]*)`
+	sep := `,`
+	if delim == '\t' {
+		colExpr = `[^\t]*`
+		sep = "\t"
+	}
+	parts := make([]string, 0, bestN*2)
+	for i := 0; i < bestN; i++ {
+		if i > 0 {
+			parts = append(parts, sep)
+		}
+		parts = append(parts, colExpr)
+	}
+	return strings.Join(parts, ""), source, true
+}
+
+// stableKeys returns sorted keys of a map for deterministic iteration.
+func stableKeys(m map[string]int) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+var _ = stableKeys // reserved for diagnostics
