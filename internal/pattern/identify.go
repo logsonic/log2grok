@@ -30,6 +30,10 @@ var structuredProbes = []structuredProbe{
 	cefProbe,
 	leefProbe,
 	w3cIISProbe,
+	androidLogcatProbe,
+	healthAppProbe,
+	sparkProbe,
+	windowsCBSProbe,
 	csvProbe,
 	tsvProbe,
 }
@@ -584,6 +588,65 @@ func w3cColumnGrok(col string) string {
 	default:
 		return "%{NOTSPACE:" + name + "}"
 	}
+}
+
+// ---------- Loghub text formats ----------
+
+var androidLogcatLineRe = regexp.MustCompile(`^\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3}\s+\d+\s+\d+\s+[A-Z]\s+\S+:`)
+
+var androidLogcatProbe = structuredProbe{
+	Name:   "Android Logcat",
+	Likely: func(sample []string) bool { return lineMatchFraction(sample, androidLogcatLineRe) >= 0.80 },
+	Render: func(sample []string) (string, string, bool) {
+		return `%{MONTHNUM2:month}-%{MONTHDAY2:day} %{TIME:time}\s+%{INT:pid}\s+%{INT:tid} %{WORD:level} %{NOTSPACE:tag}: %{GREEDYDATA:message}`,
+			"structured:Android Logcat", true
+	},
+}
+
+var healthAppLineRe = regexp.MustCompile(`^\d{8}-\d{1,2}:\d{1,2}:\d{1,2}:\d+\|[^|]+\|\d+\|`)
+
+var healthAppProbe = structuredProbe{
+	Name:   "HealthApp",
+	Likely: func(sample []string) bool { return lineMatchFraction(sample, healthAppLineRe) >= 0.80 },
+	Render: func(sample []string) (string, string, bool) {
+		return `%{INT:date}-%{INT:hour}:%{INT:minute}:%{INT:second}:%{INT:millis}\|%{NOTSPACE:component}\|%{INT:pid}\|%{GREEDYDATA:message}`,
+			"structured:HealthApp", true
+	},
+}
+
+var sparkLineRe = regexp.MustCompile(`^\d{2}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]+\s+\S+:`)
+
+var sparkProbe = structuredProbe{
+	Name:   "Spark",
+	Likely: func(sample []string) bool { return lineMatchFraction(sample, sparkLineRe) >= 0.80 },
+	Render: func(sample []string) (string, string, bool) {
+		return `%{INT:year}/%{INT:month}/%{INT:day} %{TIME:time} %{LOGLEVEL:level} %{NOTSPACE:logger}: %{GREEDYDATA:message}`,
+			"structured:Spark", true
+	},
+}
+
+var windowsCBSLineRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2},\s+\S+\s+CBS\s+`)
+
+var windowsCBSProbe = structuredProbe{
+	Name:   "Windows CBS",
+	Likely: func(sample []string) bool { return lineMatchFraction(sample, windowsCBSLineRe) >= 0.80 },
+	Render: func(sample []string) (string, string, bool) {
+		return `%{TIMESTAMP_ISO8601:timestamp}, %{LOGLEVEL:level}\s+%{NOTSPACE:component}\s+%{GREEDYDATA:message}`,
+			"structured:Windows CBS", true
+	},
+}
+
+func lineMatchFraction(sample []string, re *regexp.Regexp) float64 {
+	if len(sample) == 0 {
+		return 0
+	}
+	hits := 0
+	for _, line := range sample {
+		if re.MatchString(line) {
+			hits++
+		}
+	}
+	return float64(hits) / float64(len(sample))
 }
 
 // ---------- CSV / TSV ----------

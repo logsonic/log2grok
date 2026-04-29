@@ -512,6 +512,12 @@ var KnownPatternsCatchall = []KnownPattern{
 		Specificity: 10,
 	},
 	{
+		Name:        "Generic Date Time Program Level Message",
+		Pattern:     `%{DATE:date} %{TIME:time} %{PROG:program}(?:\[%{INT:pid}\])?: %{LOGLEVEL:level}: %{GREEDYDATA:message}`,
+		Priority:    915,
+		Specificity: 12,
+	},
+	{
 		Name:        "Generic Bracketed Timestamp",
 		Pattern:     `\[?%{TIMESTAMP_ISO8601:timestamp}\]?\s+%{GREEDYDATA:message}`,
 		Priority:    920,

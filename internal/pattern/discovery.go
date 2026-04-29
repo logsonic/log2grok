@@ -275,11 +275,20 @@ func deriveFromDrain(lines []string, diag io.Writer) (*DiscoveredPattern, error)
 	matched := EvaluateCoverage(re, lines)
 	fmt.Fprintf(diag, "drain: cluster=%d matched=%d/%d\n", dominant.ID, matched, len(lines))
 
+	// Reject severely overfit patterns: if Drain produced a pattern that
+	// matches fewer than ~20% of lines, it's almost certainly literal text
+	// that won't generalize. Fall through to fallback instead.
+	cov := ratio(matched, len(lines))
+	if cov < 0.20 {
+		fmt.Fprintf(diag, "drain: skipping overfit pattern (coverage %.3f < 0.20)\n", cov)
+		return nil, nil
+	}
+
 	return &DiscoveredPattern{
 		Source:       "drain",
 		SourceFamily: "drain",
 		Grok:         grok,
-		Coverage:     ratio(matched, len(lines)),
+		Coverage:     cov,
 		MatchedCount: matched,
 		TotalLines:   len(lines),
 		SampleLine:   sample,
@@ -291,8 +300,15 @@ func deriveSafeFallback(lines []string) *DiscoveredPattern {
 		Source string
 		Grok   string
 	}{
-		{"fallback:ISO Timestamp", `%{TIMESTAMP_ISO8601:timestamp}\s+%{GREEDYDATA:message}`},
+		// Specific timestamp formats first (narrower = fewer false positives)
+		{"fallback:US Date", `%{DATE_US:date} - %{TIME:time}: %{GREEDYDATA:message}`},
+		{"fallback:Bracketed Date", `\[%{DATE:date} %{TIME:time}\] %{GREEDYDATA:message}`},
+		{"fallback:Bracketed Time", `\[%{TIME:time}\] %{GREEDYDATA:message}`},
+		{"fallback:Day Syslog", `%{DAY:day} %{SYSLOGTIMESTAMP:timestamp} %{YEAR:year} %{GREEDYDATA:message}`},
 		{"fallback:Syslog Timestamp", `%{SYSLOGTIMESTAMP:timestamp}\s+%{GREEDYDATA:message}`},
+		{"fallback:Date Time", `%{DATE:date} %{TIME:time} %{GREEDYDATA:message}`},
+		{"fallback:ISO Timestamp", `%{TIMESTAMP_ISO8601:timestamp}\s+%{GREEDYDATA:message}`},
+		// Last resort
 		{"fallback:Message", `%{GREEDYDATA:message}`},
 	}
 	var best *DiscoveredPattern
@@ -311,7 +327,9 @@ func deriveSafeFallback(lines []string) *DiscoveredPattern {
 			TotalLines:   len(lines),
 		}
 		if c.Source == "fallback:Message" {
-			if best == nil {
+			// Prefer the message catch-all over any lower-coverage
+			// candidates set by earlier fallback attempts.
+			if best == nil || best.MatchedCount < matched {
 				best = dp
 			}
 			break

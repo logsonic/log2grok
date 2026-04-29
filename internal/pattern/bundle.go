@@ -153,7 +153,7 @@ func stripLookaround(s string) string {
 			head := s[i+2]
 			isLookahead := head == '=' || head == '!'
 			isLookbehind := false
-			if head == '<' && i+4 < len(s) && (s[i+3] == '=' || s[i+3] == '!') {
+			if head == '<' && i+3 < len(s) && (s[i+3] == '=' || s[i+3] == '!') {
 				isLookbehind = true
 			}
 			if isLookahead || isLookbehind {

@@ -62,6 +62,18 @@ func classifySlot(values []string) *fieldType {
 			return &ft
 		}
 	}
+	// No strict type matched: fall back to NOTSPACE so the slot gets a
+	// named capture instead of being rendered as escaped literal text.
+	nonEmpty := 0
+	for _, v := range values {
+		if v != "" {
+			nonEmpty++
+		}
+	}
+	if nonEmpty > 0 {
+		ft := fieldType{GrokName: "NOTSPACE", Priority: 50, NameHint: "value"}
+		return &ft
+	}
 	return nil
 }
 
