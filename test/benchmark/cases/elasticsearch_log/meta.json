@@ -1,0 +1,6 @@
+{
+  "case_name": "elasticsearch_log",
+  "expected_grok": "\\[%{TIMESTAMP_ISO8601:timestamp}\\]\\[%{LOGLEVEL:level}\\s*\\]\\[%{NOTSPACE:module}\\s*\\]\\s*\\[%{NOTSPACE:node}\\]\\s*%{GREEDYDATA:message}",
+  "expected_source": "library:Elasticsearch Log",
+  "family": "elasticsearch_log"
+}

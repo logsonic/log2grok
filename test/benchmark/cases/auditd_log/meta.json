@@ -1,0 +1,6 @@
+{
+  "case_name": "auditd_log",
+  "expected_grok": "%{GREEDYDATA:kvpairs}",
+  "expected_source": "structured:logfmt",
+  "family": "auditd_log"
+}

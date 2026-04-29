@@ -1,0 +1,6 @@
+{
+  "case_name": "go_slog_text",
+  "expected_grok": "%{GREEDYDATA:kvpairs}",
+  "expected_source": "structured:logfmt",
+  "family": "go_slog_text"
+}

@@ -1,0 +1,6 @@
+{
+  "case_name": "vault_audit_json",
+  "expected_grok": "\\{%{GREEDYDATA:json}\\}",
+  "expected_source": "structured:JSON Object",
+  "family": "vault_audit_json"
+}

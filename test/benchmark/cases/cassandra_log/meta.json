@@ -1,0 +1,6 @@
+{
+  "case_name": "cassandra_log",
+  "expected_grok": "%{LOGLEVEL:level}\\s+\\[%{NOTSPACE:thread}\\]\\s+%{TIMESTAMP_ISO8601:timestamp}\\s+%{NOTSPACE:class}:%{INT:line}\\s+-\\s+%{GREEDYDATA:message}",
+  "expected_source": "library:Cassandra Log",
+  "family": "cassandra_log"
+}

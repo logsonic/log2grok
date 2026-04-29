@@ -1,6 +1,6 @@
 {
-  "family": "ssh_auth",
   "case_name": "ssh_auth_008",
   "expected_grok": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} sshd\\[%{POSINT:pid}\\]: %{GREEDYDATA:message}",
-  "expected_source": "library:SSH Authentication"
+  "expected_source": "library:SSH Authentication",
+  "family": "ssh_auth_008"
 }

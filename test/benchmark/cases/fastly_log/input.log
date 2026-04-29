@@ -1,0 +1,10 @@
+<134>2026-04-29T01:01:00Z cache-iad-kcgs10001 service-id10001 192.168.1.1 GET /api/items/1 HTTP/1.1 201 2148
+<134>2026-04-29T02:02:00Z cache-iad-kcgs10002 service-id10002 192.168.1.2 GET /api/items/2 HTTP/1.1 202 2248
+<134>2026-04-29T03:03:00Z cache-iad-kcgs10003 service-id10003 192.168.1.3 GET /api/items/3 HTTP/1.1 200 2348
+<134>2026-04-29T04:04:00Z cache-iad-kcgs10004 service-id10004 192.168.1.4 GET /api/items/4 HTTP/1.1 201 2448
+<134>2026-04-29T05:05:00Z cache-iad-kcgs10005 service-id10005 192.168.1.5 GET /api/items/5 HTTP/1.1 202 2548
+<134>2026-04-29T06:06:00Z cache-iad-kcgs10006 service-id10006 192.168.1.6 GET /api/items/6 HTTP/1.1 200 2648
+<134>2026-04-29T07:07:00Z cache-iad-kcgs10007 service-id10007 192.168.1.7 GET /api/items/7 HTTP/1.1 201 2748
+<134>2026-04-29T08:08:00Z cache-iad-kcgs10008 service-id10008 192.168.1.8 GET /api/items/8 HTTP/1.1 202 2848
+<134>2026-04-29T09:09:00Z cache-iad-kcgs10009 service-id10009 192.168.1.9 GET /api/items/9 HTTP/1.1 200 2948
+<134>2026-04-29T10:10:00Z cache-iad-kcgs100010 service-id100010 192.168.1.10 GET /api/items/10 HTTP/1.1 201 3048

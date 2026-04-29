@@ -1,6 +1,6 @@
 {
-  "family": "nginx_access_combined",
   "case_name": "nginx_access_combined_006",
   "expected_grok": "%{IPORHOST:client_ip} %{USER:ident} %{USER:auth} \\[%{HTTPDATE:timestamp}\\] \"%{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version}\" %{INT:status} (?:%{INT:bytes}|-) \"%{DATA:referrer}\" \"%{DATA:user_agent}\"",
-  "expected_source": "library:Nginx Access Combined"
+  "expected_source": "library:Nginx Access Combined",
+  "family": "nginx_access_combined_006"
 }

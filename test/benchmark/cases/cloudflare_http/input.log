@@ -1,0 +1,10 @@
+{"ClientIP":"192.168.1.1","ClientRequestHost":"example.com","ClientRequestMethod":"GET","ClientRequestURI":"/api/items/1","EdgeStartTimestamp":1700000001,"EdgeResponseStatus":201}
+{"ClientIP":"192.168.1.2","ClientRequestHost":"example.com","ClientRequestMethod":"GET","ClientRequestURI":"/api/items/2","EdgeStartTimestamp":1700000002,"EdgeResponseStatus":202}
+{"ClientIP":"192.168.1.3","ClientRequestHost":"example.com","ClientRequestMethod":"GET","ClientRequestURI":"/api/items/3","EdgeStartTimestamp":1700000003,"EdgeResponseStatus":203}
+{"ClientIP":"192.168.1.4","ClientRequestHost":"example.com","ClientRequestMethod":"GET","ClientRequestURI":"/api/items/4","EdgeStartTimestamp":1700000004,"EdgeResponseStatus":204}
+{"ClientIP":"192.168.1.5","ClientRequestHost":"example.com","ClientRequestMethod":"GET","ClientRequestURI":"/api/items/5","EdgeStartTimestamp":1700000005,"EdgeResponseStatus":200}
+{"ClientIP":"192.168.1.6","ClientRequestHost":"example.com","ClientRequestMethod":"GET","ClientRequestURI":"/api/items/6","EdgeStartTimestamp":1700000006,"EdgeResponseStatus":201}
+{"ClientIP":"192.168.1.7","ClientRequestHost":"example.com","ClientRequestMethod":"GET","ClientRequestURI":"/api/items/7","EdgeStartTimestamp":1700000007,"EdgeResponseStatus":202}
+{"ClientIP":"192.168.1.8","ClientRequestHost":"example.com","ClientRequestMethod":"GET","ClientRequestURI":"/api/items/8","EdgeStartTimestamp":1700000008,"EdgeResponseStatus":203}
+{"ClientIP":"192.168.1.9","ClientRequestHost":"example.com","ClientRequestMethod":"GET","ClientRequestURI":"/api/items/9","EdgeStartTimestamp":1700000009,"EdgeResponseStatus":204}
+{"ClientIP":"192.168.1.10","ClientRequestHost":"example.com","ClientRequestMethod":"GET","ClientRequestURI":"/api/items/10","EdgeStartTimestamp":17000000010,"EdgeResponseStatus":200}

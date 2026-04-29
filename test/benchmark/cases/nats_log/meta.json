@@ -1,0 +1,6 @@
+{
+  "case_name": "nats_log",
+  "expected_grok": "\\[%{INT:nats_seq}\\] %{YEAR}/%{MONTHNUM2}/%{MONTHDAY2} %{TIME:time} \\[%{LOGLEVEL:level}\\]\\s+%{IPORHOST:peer}:%{INT:peer_port}\\s+-\\s+cid:%{INT:client_id}\\s+-\\s+%{GREEDYDATA:message}",
+  "expected_source": "library:NATS Log",
+  "family": "nats_log"
+}

@@ -1,0 +1,6 @@
+{
+  "case_name": "snort_alert",
+  "expected_grok": "\\[\\*\\*\\]\\s+\\[%{NOTSPACE:gid}:%{NOTSPACE:sid}:\\d+\\]\\s+%{DATA:msg}\\s+\\[\\*\\*\\]\\s+\\[Classification: %{DATA:classification}\\]\\s+\\[Priority: %{INT:priority}\\]\\s+%{MONTHNUM2}/%{MONTHDAY2}-%{TIME:time}\\s+%{IP:src_ip}:%{INT:src_port}\\s+-\u003e\\s+%{IP:dst_ip}:%{INT:dst_port}\\s+%{GREEDYDATA:rest}",
+  "expected_source": "library:Snort Alert",
+  "family": "snort_alert"
+}

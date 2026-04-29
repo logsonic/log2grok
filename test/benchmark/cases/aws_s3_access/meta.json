@@ -1,0 +1,6 @@
+{
+  "case_name": "aws_s3_access",
+  "expected_grok": "%{NOTSPACE:bucket_owner} %{NOTSPACE:bucket} \\[%{HTTPDATE:timestamp}\\] %{IP:client_ip} %{NOTSPACE:requester} %{NOTSPACE:request_id} %{PROCID:operation} %{NOTSPACE:key} \"(?:%{WORD:method} %{NOTSPACE:url}(?: HTTP/%{NUMBER:http_version})?|-)\" (?:%{INT:status}|-) (?:%{INT:error_code}|-) (?:%{INT:bytes_sent}|-) (?:%{INT:object_size}|-) (?:%{INT:request_time}|-) (?:%{INT:turnaround_time}|-) \"%{DATA:referrer}\" \"%{DATA:user_agent}\" %{GREEDYDATA:rest}",
+  "expected_source": "library:AWS S3 Access",
+  "family": "aws_s3_access"
+}

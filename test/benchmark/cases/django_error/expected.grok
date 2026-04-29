@@ -1,0 +1,1 @@
+%{LOGLEVEL:level} %{TIMESTAMP_ISO8601:timestamp} %{NOTSPACE:module} %{GREEDYDATA:message}

@@ -1,0 +1,6 @@
+{
+  "case_name": "go_std_log",
+  "expected_grok": "%{YEAR}/%{MONTHNUM2}/%{MONTHDAY2} %{TIME:time} %{NOTSPACE:file}:%{INT:line}: %{GREEDYDATA:message}",
+  "expected_source": "library:Go Standard Log",
+  "family": "go_std_log"
+}

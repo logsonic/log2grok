@@ -1,0 +1,1 @@
+\[%{TIMESTAMP_ISO8601:timestamp},000: %{LOGLEVEL:level}/%{NOTSPACE:process}\] %{GREEDYDATA:message}

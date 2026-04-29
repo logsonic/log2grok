@@ -1,0 +1,6 @@
+{
+  "case_name": "django_error",
+  "expected_grok": "%{LOGLEVEL:level} %{TIMESTAMP_ISO8601:timestamp} %{NOTSPACE:module} %{GREEDYDATA:message}",
+  "expected_source": "library:Django Error",
+  "family": "django_error"
+}

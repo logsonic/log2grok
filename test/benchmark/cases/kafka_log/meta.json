@@ -1,0 +1,6 @@
+{
+  "case_name": "kafka_log",
+  "expected_grok": "\\[%{TIMESTAMP_ISO8601:timestamp}\\]\\s+%{LOGLEVEL:level}\\s+\\[%{DATA:component}\\]\\s+%{GREEDYDATA:message}",
+  "expected_source": "library:Kafka Log",
+  "family": "kafka_log"
+}

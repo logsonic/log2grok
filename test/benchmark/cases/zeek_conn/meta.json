@@ -1,0 +1,6 @@
+{
+  "case_name": "zeek_conn",
+  "expected_grok": "[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*",
+  "expected_source": "structured:TSV",
+  "family": "zeek_conn"
+}

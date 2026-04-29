@@ -1,0 +1,10 @@
+[2026-04-29 01:01:00.000][1][warning][config] [source/common/config/grpc_stream.h:101] StreamAggregatedResources gRPC config stream closed: 14, status=Unavailable
+[2026-04-29 02:02:00.000][2][warning][config] [source/common/config/grpc_stream.h:102] StreamAggregatedResources gRPC config stream closed: 14, status=Unavailable
+[2026-04-29 03:03:00.000][3][warning][config] [source/common/config/grpc_stream.h:103] StreamAggregatedResources gRPC config stream closed: 14, status=Unavailable
+[2026-04-29 04:04:00.000][4][warning][config] [source/common/config/grpc_stream.h:104] StreamAggregatedResources gRPC config stream closed: 14, status=Unavailable
+[2026-04-29 05:05:00.000][5][warning][config] [source/common/config/grpc_stream.h:105] StreamAggregatedResources gRPC config stream closed: 14, status=Unavailable
+[2026-04-29 06:06:00.000][6][warning][config] [source/common/config/grpc_stream.h:106] StreamAggregatedResources gRPC config stream closed: 14, status=Unavailable
+[2026-04-29 07:07:00.000][7][warning][config] [source/common/config/grpc_stream.h:107] StreamAggregatedResources gRPC config stream closed: 14, status=Unavailable
+[2026-04-29 08:08:00.000][8][warning][config] [source/common/config/grpc_stream.h:108] StreamAggregatedResources gRPC config stream closed: 14, status=Unavailable
+[2026-04-29 09:09:00.000][9][warning][config] [source/common/config/grpc_stream.h:109] StreamAggregatedResources gRPC config stream closed: 14, status=Unavailable
+[2026-04-29 10:10:00.000][10][warning][config] [source/common/config/grpc_stream.h:110] StreamAggregatedResources gRPC config stream closed: 14, status=Unavailable

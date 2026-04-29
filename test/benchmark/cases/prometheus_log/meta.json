@@ -1,0 +1,6 @@
+{
+  "case_name": "prometheus_log",
+  "expected_grok": "%{GREEDYDATA:kvpairs}",
+  "expected_source": "structured:logfmt",
+  "family": "prometheus_log"
+}

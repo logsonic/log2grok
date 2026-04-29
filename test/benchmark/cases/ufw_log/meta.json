@@ -1,0 +1,6 @@
+{
+  "case_name": "ufw_log",
+  "expected_grok": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} kernel: \\[UFW %{WORD:action}\\] %{GREEDYDATA:details}",
+  "expected_source": "library:UFW Log",
+  "family": "ufw_log"
+}

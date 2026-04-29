@@ -1,0 +1,6 @@
+{
+  "case_name": "azure_activity_json",
+  "expected_grok": "\\{%{GREEDYDATA:json}\\}",
+  "expected_source": "structured:JSON Object",
+  "family": "azure_activity_json"
+}

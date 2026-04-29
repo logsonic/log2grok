@@ -1,0 +1,6 @@
+{
+  "case_name": "mongodb_log",
+  "expected_grok": "\\{%{GREEDYDATA:json}\\}",
+  "expected_source": "structured:JSON Object",
+  "family": "mongodb_log"
+}

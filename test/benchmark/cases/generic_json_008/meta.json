@@ -1,6 +1,6 @@
 {
-  "family": "generic_json",
   "case_name": "generic_json_008",
   "expected_grok": "\\{%{GREEDYDATA:json}\\}",
-  "expected_source": "structured:JSON Object"
+  "expected_source": "structured:JSON Object",
+  "family": "generic_json_008"
 }

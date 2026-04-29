@@ -1,0 +1,6 @@
+{
+  "case_name": "serilog_text",
+  "expected_grok": "%{TIMESTAMP_ISO8601:timestamp} \\[%{LOGLEVEL:level}\\] %{GREEDYDATA:message}",
+  "expected_source": "library:Serilog Text",
+  "family": "serilog_text"
+}

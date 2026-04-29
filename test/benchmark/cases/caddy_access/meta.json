@@ -1,0 +1,6 @@
+{
+  "case_name": "caddy_access",
+  "expected_grok": "\\{%{GREEDYDATA:json}\\}",
+  "expected_source": "structured:JSON Object",
+  "family": "caddy_access"
+}

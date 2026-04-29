@@ -19,7 +19,7 @@ type benchCase struct {
 func loadCases(t testing.TB) []benchCase {
 	t.Helper()
 
-	root := filepath.Join("test", "benchmark", "cases")
+	root := filepath.Join("cases")
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		t.Fatalf("read cases dir: %v", err)
@@ -100,7 +100,7 @@ func TestDiscoverCorrectnessSuite(t *testing.T) {
 				t.Fatalf("grok mismatch\ngot:  %s\nwant: %s", dp.Grok, tc.Expected)
 			}
 
-			re, err := pattern.CompileGrok(dp.Grok, nil)
+			re, err := pattern.CompileGrok(dp.Grok, dp.CustomPatterns)
 			if err != nil {
 				t.Fatalf("compile returned grok failed: %v", err)
 			}

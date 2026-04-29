@@ -1,0 +1,1 @@
+%{IPORHOST:client_ip} - %{USER:ident} \[%{HTTPDATE_CONDENSED:timestamp}\] "%{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version}" %{INT:status} -

@@ -1,0 +1,6 @@
+{
+  "case_name": "docker_compose",
+  "expected_grok": "%{NOTSPACE:service}\\s+\\|\\s+\\[%{TIMESTAMP_ISO8601:timestamp}\\] %{LOGLEVEL:level} %{NOTSPACE:logger}: %{GREEDYDATA:message}",
+  "expected_source": "library:Docker Compose Log",
+  "family": "docker_compose"
+}

@@ -1,0 +1,6 @@
+{
+  "case_name": "mysql_error",
+  "expected_grok": "%{TIMESTAMP_ISO8601:timestamp} %{INT:thread_id} \\[%{LOGLEVEL:level}\\] \\[%{NOTSPACE:error_code}\\] \\[%{WORD:component}\\] %{GREEDYDATA:message}",
+  "expected_source": "library:MySQL Error",
+  "family": "mysql_error"
+}

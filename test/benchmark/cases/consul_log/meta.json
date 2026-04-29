@@ -1,0 +1,6 @@
+{
+  "case_name": "consul_log",
+  "expected_grok": "%{TIMESTAMP_ISO8601:timestamp} \\[%{LOGLEVEL:level}\\]\\s+agent: %{GREEDYDATA:message}",
+  "expected_source": "library:Consul Log",
+  "family": "consul_log"
+}

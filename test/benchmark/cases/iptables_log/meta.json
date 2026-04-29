@@ -1,0 +1,6 @@
+{
+  "case_name": "iptables_log",
+  "expected_grok": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} kernel: \\[%{NUMBER:uptime}\\] %{GREEDYDATA:iptables}",
+  "expected_source": "library:Iptables Log",
+  "family": "iptables_log"
+}

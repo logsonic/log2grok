@@ -1,0 +1,6 @@
+{
+  "case_name": "aws_elb_classic",
+  "expected_grok": "\\[?%{TIMESTAMP_ISO8601:timestamp}\\]?\\s+%{GREEDYDATA:message}",
+  "expected_source": "library:Generic Bracketed Timestamp",
+  "family": "aws_elb_classic"
+}

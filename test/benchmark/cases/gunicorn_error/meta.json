@@ -1,0 +1,6 @@
+{
+  "case_name": "gunicorn_error",
+  "expected_grok": "\\[%{TIMESTAMP_ISO8601:timestamp}\\] \\[%{INT:pid}\\] \\[%{LOGLEVEL:level}\\] %{GREEDYDATA:message}",
+  "expected_source": "library:Gunicorn Error",
+  "family": "gunicorn_error"
+}

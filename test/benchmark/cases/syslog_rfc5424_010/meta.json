@@ -1,6 +1,6 @@
 {
-  "family": "syslog_rfc5424",
   "case_name": "syslog_rfc5424_010",
   "expected_grok": "\u003c%{POSINT:priority}\u003e%{NONNEGINT:version} %{TIMESTAMP_ISO8601:timestamp} %{HOSTNAME:hostname} %{NOTSPACE:app_name} %{NOTSPACE:proc_id} %{NOTSPACE:msg_id} (?:-|%{SYSLOG5424SD:structured_data}) ?%{GREEDYDATA:message}",
-  "expected_source": "library:Syslog RFC5424"
+  "expected_source": "library:Syslog RFC5424",
+  "family": "syslog_rfc5424_010"
 }

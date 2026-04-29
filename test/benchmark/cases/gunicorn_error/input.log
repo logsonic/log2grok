@@ -1,0 +1,10 @@
+[2026-04-29 01:01:00 +0000] [1001] [ERROR] Exception in worker process 1
+[2026-04-29 02:02:00 +0000] [1002] [ERROR] Exception in worker process 2
+[2026-04-29 03:03:00 +0000] [1003] [ERROR] Exception in worker process 3
+[2026-04-29 04:04:00 +0000] [1004] [ERROR] Exception in worker process 4
+[2026-04-29 05:05:00 +0000] [1005] [ERROR] Exception in worker process 5
+[2026-04-29 06:06:00 +0000] [1006] [ERROR] Exception in worker process 6
+[2026-04-29 07:07:00 +0000] [1007] [ERROR] Exception in worker process 7
+[2026-04-29 08:08:00 +0000] [1008] [ERROR] Exception in worker process 8
+[2026-04-29 09:09:00 +0000] [1009] [ERROR] Exception in worker process 9
+[2026-04-29 10:10:00 +0000] [1010] [ERROR] Exception in worker process 10

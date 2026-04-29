@@ -1,0 +1,6 @@
+{
+  "case_name": "gcp_audit_json",
+  "expected_grok": "\\{%{GREEDYDATA:json}\\}",
+  "expected_source": "structured:JSON Object",
+  "family": "gcp_audit_json"
+}

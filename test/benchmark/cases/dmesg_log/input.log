@@ -1,0 +1,10 @@
+[    1.001000] usb 1-1: New USB device found, idVendor=1234, idProduct=5678, bcdDevice=1.01
+[    2.002000] usb 2-2: New USB device found, idVendor=1234, idProduct=5678, bcdDevice=2.01
+[    3.003000] usb 3-3: New USB device found, idVendor=1234, idProduct=5678, bcdDevice=3.01
+[    4.004000] usb 4-4: New USB device found, idVendor=1234, idProduct=5678, bcdDevice=4.01
+[    5.005000] usb 5-5: New USB device found, idVendor=1234, idProduct=5678, bcdDevice=5.01
+[    6.006000] usb 6-6: New USB device found, idVendor=1234, idProduct=5678, bcdDevice=6.01
+[    7.007000] usb 7-7: New USB device found, idVendor=1234, idProduct=5678, bcdDevice=7.01
+[    8.008000] usb 8-8: New USB device found, idVendor=1234, idProduct=5678, bcdDevice=8.01
+[    9.009000] usb 9-9: New USB device found, idVendor=1234, idProduct=5678, bcdDevice=9.01
+[   10.010000] usb 10-10: New USB device found, idVendor=1234, idProduct=5678, bcdDevice=10.01

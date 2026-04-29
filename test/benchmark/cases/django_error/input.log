@@ -1,0 +1,10 @@
+ERROR 2026-04-29 01:01:00 django.request Internal Server Error: /api/endpoint/1
+ERROR 2026-04-29 02:02:00 django.request Internal Server Error: /api/endpoint/2
+ERROR 2026-04-29 03:03:00 django.request Internal Server Error: /api/endpoint/3
+ERROR 2026-04-29 04:04:00 django.request Internal Server Error: /api/endpoint/4
+ERROR 2026-04-29 05:05:00 django.request Internal Server Error: /api/endpoint/5
+ERROR 2026-04-29 06:06:00 django.request Internal Server Error: /api/endpoint/6
+ERROR 2026-04-29 07:07:00 django.request Internal Server Error: /api/endpoint/7
+ERROR 2026-04-29 08:08:00 django.request Internal Server Error: /api/endpoint/8
+ERROR 2026-04-29 09:09:00 django.request Internal Server Error: /api/endpoint/9
+ERROR 2026-04-29 10:10:00 django.request Internal Server Error: /api/endpoint/10

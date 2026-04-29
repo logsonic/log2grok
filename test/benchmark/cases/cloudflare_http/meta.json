@@ -1,0 +1,6 @@
+{
+  "case_name": "cloudflare_http",
+  "expected_grok": "\\{%{GREEDYDATA:json}\\}",
+  "expected_source": "structured:JSON Object",
+  "family": "cloudflare_http"
+}

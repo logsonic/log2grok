@@ -1,0 +1,6 @@
+{
+  "case_name": "sudo_log",
+  "expected_grok": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} sudo:\\s+%{NOTSPACE:user}\\s+:.*?USER=root\\s*;\\s*COMMAND=%{GREEDYDATA:command}",
+  "expected_source": "library:Sudo Log",
+  "family": "sudo_log"
+}

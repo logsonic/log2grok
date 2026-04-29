@@ -1,0 +1,6 @@
+{
+  "case_name": "grafana_log",
+  "expected_grok": "%{GREEDYDATA:kvpairs}",
+  "expected_source": "structured:logfmt",
+  "family": "grafana_log"
+}

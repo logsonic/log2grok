@@ -1,0 +1,10 @@
+Apr 29 01:01:00 server sudo:  user1 : TTY=pts/0 ; PWD=/home/user1 ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Apr 29 02:02:00 server sudo:  user2 : TTY=pts/0 ; PWD=/home/user2 ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Apr 29 03:03:00 server sudo:  user3 : TTY=pts/0 ; PWD=/home/user3 ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Apr 29 04:04:00 server sudo:  user4 : TTY=pts/0 ; PWD=/home/user4 ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Apr 29 05:05:00 server sudo:  user5 : TTY=pts/0 ; PWD=/home/user5 ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Apr 29 06:06:00 server sudo:  user6 : TTY=pts/0 ; PWD=/home/user6 ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Apr 29 07:07:00 server sudo:  user7 : TTY=pts/0 ; PWD=/home/user7 ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Apr 29 08:08:00 server sudo:  user8 : TTY=pts/0 ; PWD=/home/user8 ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Apr 29 09:09:00 server sudo:  user9 : TTY=pts/0 ; PWD=/home/user9 ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Apr 29 10:10:00 server sudo:  user10 : TTY=pts/0 ; PWD=/home/user10 ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx

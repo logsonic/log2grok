@@ -1,0 +1,1 @@
+\[%{HTTPDATE_CONDENSED:timestamp}\] "%{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version}" %{INT:status} %{INT:bytes}

@@ -1,0 +1,6 @@
+{
+  "case_name": "winston_json",
+  "expected_grok": "\\{%{GREEDYDATA:json}\\}",
+  "expected_source": "structured:JSON Object",
+  "family": "winston_json"
+}

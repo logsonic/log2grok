@@ -1,0 +1,1 @@
+%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} kernel: \[UFW %{WORD:action}\] %{GREEDYDATA:details}

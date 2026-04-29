@@ -1,0 +1,6 @@
+{
+  "case_name": "fastly_log",
+  "expected_grok": "\u003c%{INT:priority}\u003e%{TIMESTAMP_ISO8601:timestamp} %{NOTSPACE:cache} %{NOTSPACE:service} %{IP:client_ip} %{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version} %{INT:status} %{INT:bytes}",
+  "expected_source": "library:Fastly Log",
+  "family": "fastly_log"
+}

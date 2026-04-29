@@ -1,0 +1,6 @@
+{
+  "case_name": "go_slog_json",
+  "expected_grok": "\\{%{GREEDYDATA:json}\\}",
+  "expected_source": "structured:JSON Object",
+  "family": "go_slog_json"
+}

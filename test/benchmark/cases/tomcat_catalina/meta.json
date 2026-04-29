@@ -1,0 +1,6 @@
+{
+  "case_name": "tomcat_catalina",
+  "expected_grok": "%{MONTHDAY2}-%{MONTH}-%{YEAR} %{TIME:time} %{LOGLEVEL:level} \\[%{PROCID:thread}\\] %{GREEDYDATA:message}",
+  "expected_source": "library:Tomcat Catalina",
+  "family": "tomcat_catalina"
+}

@@ -1,0 +1,1 @@
+%{NOTSPACE:service}\s+\|\s+\[%{TIMESTAMP_ISO8601:timestamp}\] %{LOGLEVEL:level} %{NOTSPACE:logger}: %{GREEDYDATA:message}

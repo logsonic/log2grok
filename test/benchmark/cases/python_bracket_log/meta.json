@@ -1,0 +1,6 @@
+{
+  "case_name": "python_bracket_log",
+  "expected_grok": "\\[%{TIMESTAMP_ISO8601:timestamp}\\]\\s+\\[%{LOGLEVEL:level}\\]\\s+\\[%{NOTSPACE:logger}:%{INT:pid}\\]\\s+%{GREEDYDATA:message}",
+  "expected_source": "library:Python Bracket Log",
+  "family": "python_bracket_log"
+}

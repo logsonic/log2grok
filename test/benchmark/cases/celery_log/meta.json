@@ -1,0 +1,6 @@
+{
+  "case_name": "celery_log",
+  "expected_grok": "\\[%{TIMESTAMP_ISO8601:timestamp},000: %{LOGLEVEL:level}/%{NOTSPACE:process}\\] %{GREEDYDATA:message}",
+  "expected_source": "library:Celery Log",
+  "family": "celery_log"
+}

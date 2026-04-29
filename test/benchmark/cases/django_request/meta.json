@@ -1,0 +1,6 @@
+{
+  "case_name": "django_request",
+  "expected_grok": "\\[%{HTTPDATE_CONDENSED:timestamp}\\] \"%{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version}\" %{INT:status} %{INT:bytes}",
+  "expected_source": "library:Django Request",
+  "family": "django_request"
+}

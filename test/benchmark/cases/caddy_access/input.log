@@ -1,0 +1,10 @@
+{"level":"info","ts":1700000001.10,"logger":"http.log.access","msg":"handled request","request":{"host":"example.com","method":"GET","uri":"/api/data/1"},"status":201,"duration":0.5}
+{"level":"info","ts":1700000002.20,"logger":"http.log.access","msg":"handled request","request":{"host":"example.com","method":"GET","uri":"/api/data/2"},"status":202,"duration":0.10}
+{"level":"info","ts":1700000003.30,"logger":"http.log.access","msg":"handled request","request":{"host":"example.com","method":"GET","uri":"/api/data/3"},"status":200,"duration":0.15}
+{"level":"info","ts":1700000004.40,"logger":"http.log.access","msg":"handled request","request":{"host":"example.com","method":"GET","uri":"/api/data/4"},"status":201,"duration":0.20}
+{"level":"info","ts":1700000005.50,"logger":"http.log.access","msg":"handled request","request":{"host":"example.com","method":"GET","uri":"/api/data/5"},"status":202,"duration":0.25}
+{"level":"info","ts":1700000006.60,"logger":"http.log.access","msg":"handled request","request":{"host":"example.com","method":"GET","uri":"/api/data/6"},"status":200,"duration":0.30}
+{"level":"info","ts":1700000007.70,"logger":"http.log.access","msg":"handled request","request":{"host":"example.com","method":"GET","uri":"/api/data/7"},"status":201,"duration":0.35}
+{"level":"info","ts":1700000008.80,"logger":"http.log.access","msg":"handled request","request":{"host":"example.com","method":"GET","uri":"/api/data/8"},"status":202,"duration":0.40}
+{"level":"info","ts":1700000009.90,"logger":"http.log.access","msg":"handled request","request":{"host":"example.com","method":"GET","uri":"/api/data/9"},"status":200,"duration":0.45}
+{"level":"info","ts":17000000010.100,"logger":"http.log.access","msg":"handled request","request":{"host":"example.com","method":"GET","uri":"/api/data/10"},"status":201,"duration":0.50}
