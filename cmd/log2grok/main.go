@@ -40,12 +40,7 @@ func main() {
 	if *verbose {
 		diag = os.Stderr
 	}
-	dp, err := l2g.Discover(lines, l2g.Options{
-		LibraryThreshold: *threshold,
-		MaxLines:         *maxLines,
-		Verbose:          *verbose,
-		Diagnostics:      diag,
-	})
+	dp, err := discoverLines(lines, truncated, *threshold, *verbose, diag)
 	if err != nil {
 		if errors.Is(err, l2g.ErrEmptyInput) {
 			fmt.Fprintln(os.Stderr, "error: input has no non-empty lines")
@@ -58,12 +53,27 @@ func main() {
 	fmt.Println(dp.Grok)
 	if !*quiet {
 		suffix := ""
-		if truncated {
+		if dp.Truncated {
 			suffix = fmt.Sprintf(" (truncated at %d)", *maxLines)
 		}
 		fmt.Printf("# matched %d / %d lines (%.1f%%) -- %s%s\n",
 			dp.MatchedCount, dp.TotalLines, dp.Coverage*100, dp.Source, suffix)
 	}
+}
+
+func discoverLines(lines []string, truncated bool, threshold float64, verbose bool, diag io.Writer) (*l2g.DiscoveredPattern, error) {
+	dp, err := l2g.Discover(lines, l2g.Options{
+		LibraryThreshold: threshold,
+		Verbose:          verbose,
+		Diagnostics:      diag,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if truncated {
+		dp.Truncated = true
+	}
+	return dp, nil
 }
 
 func openInput(path string) (io.ReadCloser, error) {
