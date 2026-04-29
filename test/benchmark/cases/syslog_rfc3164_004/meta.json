@@ -1,0 +1,6 @@
+{
+  "family": "syslog_rfc3164",
+  "case_name": "syslog_rfc3164_004",
+  "expected_grok": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} %{PROG:program}(?:\\[%{POSINT:pid}\\])?: %{GREEDYDATA:message}",
+  "expected_source": "library:Syslog RFC3164"
+}

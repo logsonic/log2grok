@@ -1,0 +1,6 @@
+{
+  "family": "generic_logfmt",
+  "case_name": "generic_logfmt_009",
+  "expected_grok": "%{GREEDYDATA:kvpairs}",
+  "expected_source": "structured:logfmt"
+}

@@ -1,0 +1,6 @@
+{
+  "family": "redis",
+  "case_name": "redis_009",
+  "expected_grok": "%{INT:pid}:%{WORD:role} %{MONTHDAY:day} %{MONTH:month} %{YEAR:year} %{TIME:time} %{REDISLEVEL:level} %{GREEDYDATA:message}",
+  "expected_source": "library:Redis"
+}

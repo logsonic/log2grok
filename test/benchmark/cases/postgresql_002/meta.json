@@ -1,0 +1,6 @@
+{
+  "family": "postgresql",
+  "case_name": "postgresql_002",
+  "expected_grok": "%{TIMESTAMP_ISO8601:timestamp}(?: %{TZ:timezone})? \\[%{POSINT:pid}\\](?: %{DATA:user_db})? %{LOGLEVEL:level}:\\s+%{GREEDYDATA:message}",
+  "expected_source": "library:PostgreSQL"
+}

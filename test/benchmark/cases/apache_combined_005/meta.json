@@ -1,0 +1,6 @@
+{
+  "family": "apache_combined",
+  "case_name": "apache_combined_005",
+  "expected_grok": "%{IPORHOST:client_ip} %{USER:ident} %{USER:auth} \\[%{HTTPDATE:timestamp}\\] \"%{WORD:method} %{NOTSPACE:url}(?: HTTP/%{NUMBER:http_version})?\" %{INT:status} (?:%{INT:bytes}|-) \"%{DATA:referrer}\" \"%{DATA:user_agent}\"",
+  "expected_source": "library:Apache Combined"
+}

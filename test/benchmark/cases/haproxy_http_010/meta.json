@@ -1,0 +1,6 @@
+{
+  "family": "haproxy_http",
+  "case_name": "haproxy_http_010",
+  "expected_grok": "%{IP:client_ip}:%{INT:client_port} \\[%{HTTPDATE:timestamp}\\] %{NOTSPACE:frontend_name} %{NOTSPACE:backend_name}/%{NOTSPACE:server_name} %{INT:t_request}/%{INT:t_queue}/%{INT:t_connect}/%{INT:t_response}/%{INT:t_total} %{INT:status} %{INT:bytes_read} %{NOTSPACE:req_cookie} %{NOTSPACE:resp_cookie} %{NOTSPACE:termination_state} %{INT:actconn}/%{INT:feconn}/%{INT:beconn}/%{INT:srvconn}/%{INT:retries} %{INT:srv_queue}/%{INT:backend_queue} \"(?:%{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version}|%{DATA:raw_request})\"",
+  "expected_source": "library:HAProxy HTTP"
+}

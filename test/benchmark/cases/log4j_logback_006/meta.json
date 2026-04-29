@@ -1,0 +1,6 @@
+{
+  "family": "log4j_logback",
+  "case_name": "log4j_logback_006",
+  "expected_grok": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+\\[%{DATA:thread}\\]\\s+%{JAVACLASS:logger}\\s+-\\s+%{GREEDYDATA:message}",
+  "expected_source": "library:Log4j Logback"
+}
