@@ -54,6 +54,15 @@ This project must compile both as:
 
 Do not expose only `internal/...` APIs. External callers cannot import `internal` packages.
 
+### Access constraints (prevent context overflow)
+When following this spec, do not open or analyze any repository content under:
+- `test/` (including `testdata/`)
+- `tools/`
+
+Instead, reason solely from:
+- this spec, and
+- production code under `cmd/log2grok`, `pkg/log2grok`, and `internal/`.
+
 ---
 
 ## 3. How the Program Decides on a Pattern
@@ -554,7 +563,7 @@ func deriveSafeFallback(lines []string) *DiscoveredPattern {
 }
 
 // ratio guards against div-by-zero. Discover already rejects empty input,
-// but callers in tests and tools may not.
+// but other callers may not.
 func ratio(num, denom int) float64 {
     if denom == 0 { return 0 }
     return float64(num) / float64(denom)
