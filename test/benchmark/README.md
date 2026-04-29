@@ -1,22 +1,6 @@
 # log2grok Benchmark Suite
 
-This folder contains a large synthetic correctness + benchmark suite for `log2grok`.
-
-## Generate benchmark corpus
-
-Run:
-
-```bash
-go run ./tools/gen_bench_suite
-```
-
-This generates `test/benchmark/cases/` with **120 case folders** (12 log families x 10 variants), each containing:
-
-- `input.log`
-- `expected.grok`
-- `meta.json`
-
-Total generated files: **360**.
+Correctness + benchmark suite for `log2grok`. Cases live under `cases/`, each a folder with `input.log`, `expected.grok`, and `meta.json`. Edit cases in place — there is no generator.
 
 ## Run correctness suite
 
