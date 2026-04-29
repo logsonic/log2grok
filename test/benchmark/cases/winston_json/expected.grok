@@ -1,1 +1,1 @@
-\{%{GREEDYDATA:json}\}
+\{\s*"level"\s*:\s*%{QUOTEDSTRING:level}\s*,\s*"message"\s*:\s*%{QUOTEDSTRING:message}\s*,\s*"timestamp"\s*:\s*%{QUOTEDSTRING:timestamp}\s*,\s*"service"\s*:\s*%{QUOTEDSTRING:service}\s*\}

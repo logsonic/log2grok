@@ -1,1 +1,1 @@
-\{%{GREEDYDATA:json}\}
+\{\s*"ClientIP"\s*:\s*%{QUOTEDSTRING:clientip}\s*,\s*"ClientRequestHost"\s*:\s*%{QUOTEDSTRING:clientrequesthost}\s*,\s*"ClientRequestMethod"\s*:\s*%{QUOTEDSTRING:clientrequestmethod}\s*,\s*"ClientRequestURI"\s*:\s*%{QUOTEDSTRING:clientrequesturi}\s*,\s*"EdgeStartTimestamp"\s*:\s*%{NUMBER:edgestarttimestamp}\s*,\s*"EdgeResponseStatus"\s*:\s*%{NUMBER:edgeresponsestatus}\s*\}

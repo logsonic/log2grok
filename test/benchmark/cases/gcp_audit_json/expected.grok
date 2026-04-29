@@ -1,1 +1,1 @@
-\{%{GREEDYDATA:json}\}
+\{\s*"protoPayload"\s*:\s*%{DATA:protopayload}\s*,\s*"insertId"\s*:\s*%{QUOTEDSTRING:insertid}\s*,\s*"resource"\s*:\s*%{DATA:resource}\s*,\s*"timestamp"\s*:\s*%{QUOTEDSTRING:timestamp}\s*,\s*"severity"\s*:\s*%{QUOTEDSTRING:level}\s*\}
