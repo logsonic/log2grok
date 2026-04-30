@@ -1,6 +1,7 @@
 package pattern
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -50,42 +51,129 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 
 	sample := chooseSample(normalized.MatchLines, 4096)
 
+	// All three stages run concurrently. Each writes its diagnostics to a
+	// per-stage buffer so the merged output preserves the historical
+	// stage1→stage2→stage3 ordering regardless of completion order.
+	//
+	// Auto-accept follows stage priority (structured > library > drain),
+	// not finish order: we read results in priority order and short-circuit
+	// the moment a higher-priority stage clears its threshold. Lower-priority
+	// goroutines still run to completion in the background — their channels
+	// are buffered so they exit cleanly without being read. drain3 has no
+	// in-flight cancellation hook, so this is the most we can do.
+	// Buffered (capacity 1) so a goroutine whose result the coordinator
+	// never reads — e.g. drain when structured auto-accepts — still
+	// completes its send and exits cleanly.
+	structuredCh := make(chan stageResult, 1)
+	libraryCh := make(chan stageResult, 1)
+	drainCh := make(chan stageResult, 1)
+
+	// Stage 1 — structured log formats such as (JSON / logfmt / CEF / W3C / CSV / TSV).
+	// Auto-accepts only when the candidate has at least one typed capture,
+	// which excludes the keyless JSON skeleton (\{%{GREEDYDATA:json}\}) so
+	// it can't pre-empt the more informative library/drain stages.
+	go func() {
+		var buf bytes.Buffer
+		dp := tryStructured(sample, normalized.MatchLines, &buf)
+		accept := dp != nil && dp.Coverage >= threshold && structuredHasTypedCapture(dp)
+		if accept {
+			fmt.Fprintf(&buf, "stage1 structured auto-accept: %s coverage=%.3f\n", dp.Source, dp.Coverage)
+		}
+		structuredCh <- stageResult{candidate: dp, autoAccept: accept, diag: &buf}
+	}()
+
+	// Stage 2 — library: regex KnownPatterns scored on the sample, then
+	// the top candidates re-evaluated against the full input.
+	go func() {
+		var buf bytes.Buffer
+		dp := tryLibrary(sample, normalized.MatchLines, threshold, &buf)
+		accept := dp != nil && dp.Coverage >= threshold
+		if accept {
+			fmt.Fprintf(&buf, "stage2 library auto-accept: %s coverage=%.3f\n", dp.Source, dp.Coverage)
+		}
+		libraryCh <- stageResult{candidate: dp, autoAccept: accept, diag: &buf}
+	}()
+
+	// Stage 3 — drain: drain3 clustering → token classifier → renderer.
+	// The most expensive stage and not interruptible (drain3 has no
+	// cancellation hook), so this goroutine always runs to completion
+	// even when a higher-priority stage has already auto-accepted.
+	go func() {
+		var buf bytes.Buffer
+		dp, err := deriveFromDrain(normalized.MatchLines, &buf)
+		if err != nil {
+			fmt.Fprintf(&buf, "stage3 drain error: %v\n", err)
+			drainCh <- stageResult{diag: &buf}
+			return
+		}
+		accept := dp != nil && dp.Grok != "" && dp.Coverage >= 0.85
+		if accept {
+			fmt.Fprintf(&buf, "stage3 drain auto-accept: coverage=%.3f\n", dp.Coverage)
+		}
+		drainCh <- stageResult{candidate: dp, autoAccept: accept, diag: &buf}
+	}()
+
+	// Read in priority order. Auto-accept of an earlier stage wins
+	// regardless of which goroutine actually finished first.
+
+	structured := <-structuredCh
+	if structured.autoAccept {
+		flushDiag(diag, structured.diag)
+		return markTruncated(structured.candidate, truncated), nil
+	}
+
+	library := <-libraryCh
+	if library.autoAccept {
+		flushDiag(diag, structured.diag, library.diag)
+		return markTruncated(library.candidate, truncated), nil
+	}
+
+	drain := <-drainCh
+	flushDiag(diag, structured.diag, library.diag, drain.diag)
+	if drain.autoAccept {
+		return markTruncated(drain.candidate, truncated), nil
+	}
+
 	var best *DiscoveredPattern
-
-	if dp := tryStructured(sample, normalized.MatchLines, diag); dp != nil {
-		if dp.Coverage >= 0.90 {
-			fmt.Fprintf(diag, "stage1 structured auto-accept: %s coverage=%.3f\n", dp.Source, dp.Coverage)
-			return markTruncated(dp, truncated), nil
-		}
-		best = pickBetter(best, dp)
+	best = pickBetter(best, structured.candidate)
+	best = pickBetter(best, library.candidate)
+	if drain.candidate != nil && drain.candidate.Grok != "" {
+		best = pickBetter(best, drain.candidate)
 	}
 
-	if dp := tryLibrary(sample, normalized.MatchLines, threshold, diag); dp != nil {
-		if dp.Coverage >= threshold {
-			fmt.Fprintf(diag, "stage2 library auto-accept: %s coverage=%.3f\n", dp.Source, dp.Coverage)
-			return markTruncated(dp, truncated), nil
-		}
-		best = pickBetter(best, dp)
-	}
-
-	if dp, err := deriveFromDrain(normalized.MatchLines, diag); err == nil && dp != nil && dp.Grok != "" {
-		if dp.Coverage >= 0.85 {
-			fmt.Fprintf(diag, "stage3 drain auto-accept: coverage=%.3f\n", dp.Coverage)
-			return markTruncated(dp, truncated), nil
-		}
-		best = pickBetter(best, dp)
-	} else if err != nil {
-		fmt.Fprintf(diag, "stage3 drain error: %v\n", err)
-	}
-
-	if best != nil {
-		if best.MatchedCount == 0 {
-			return markTruncated(deriveSafeFallback(normalized.MatchLines), truncated), nil
-		}
+	if best != nil && best.MatchedCount > 0 {
 		return markTruncated(best, truncated), nil
 	}
 
 	return markTruncated(deriveSafeFallback(normalized.MatchLines), truncated), nil
+}
+
+// stageResult carries one stage's outcome back to Discover. autoAccept
+// is the per-stage auto-accept decision (already gated by stage-specific
+// rules like structuredHasTypedCapture); diag is the buffered diagnostic
+// stream for that stage, flushed in priority order by the coordinator.
+type stageResult struct {
+	candidate  *DiscoveredPattern
+	autoAccept bool
+	diag       *bytes.Buffer
+}
+
+// flushDiag writes per-stage diagnostic buffers to the user-supplied
+// writer in the order given by the caller. Callers always pass buffers
+// in stage-priority order (structured, library, drain), which preserves
+// the historical "stage1 → stage2 → stage3" output shape regardless of
+// which goroutine finished first. The io.Discard short-circuit avoids
+// touching buffers that no one will read.
+func flushDiag(w io.Writer, bufs ...*bytes.Buffer) {
+	if w == nil || w == io.Discard {
+		return
+	}
+	for _, b := range bufs {
+		if b == nil || b.Len() == 0 {
+			continue
+		}
+		_, _ = w.Write(b.Bytes())
+	}
 }
 
 func limitLines(lines []string, max int) ([]string, bool) {
@@ -144,6 +232,25 @@ func familyRank(family string) int {
 	default:
 		return 4
 	}
+}
+
+// structuredHasTypedCapture decides whether the structured-stage
+// candidate is informative enough to auto-accept. CSV/TSV/W3C and other
+// schema-driven literal patterns intentionally have zero named captures
+// (column semantics are not recoverable from a delimiter); they remain
+// eligible. The single case we want to block is the keyless JSON
+// skeleton — `\{%{GREEDYDATA:json}\}` — which is emitted when no JSON
+// key crosses the common-frequency bar. That candidate matches every
+// JSON line at 100% coverage and would otherwise short-circuit the
+// later (more informative) stages.
+func structuredHasTypedCapture(dp *DiscoveredPattern) bool {
+	if dp == nil {
+		return false
+	}
+	if dp.Grok == `\{%{GREEDYDATA:json}\}` {
+		return false
+	}
+	return true
 }
 
 func typedCaptureCount(grok string) int {
@@ -214,9 +321,21 @@ func tryLibrary(sample, all []string, threshold float64, diag io.Writer) *Discov
 	candidates := scoreLibraryOnSample(sample)
 	candidates = keepTopCandidates(candidates, 12)
 
+	// Tie the per-candidate sample-coverage floor to the user's overall
+	// threshold (with a hard cap at 0.50 to keep the legacy default
+	// behaviour). Users who lower LibraryThreshold for heterogeneous
+	// inputs get a correspondingly relaxed floor.
+	sampleFloor := threshold * 0.6
+	if sampleFloor > 0.50 {
+		sampleFloor = 0.50
+	}
+	if sampleFloor < 0.10 {
+		sampleFloor = 0.10
+	}
+
 	var best *candidateResult
 	for _, c := range candidates {
-		if c.SampleCoverage < 0.50 {
+		if c.SampleCoverage < sampleFloor {
 			continue
 		}
 		c := c

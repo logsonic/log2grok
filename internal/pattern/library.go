@@ -36,7 +36,9 @@ func dedupKnownPatterns(in []KnownPattern) []KnownPattern {
 	seen := make(map[string]struct{}, len(in))
 	out := make([]KnownPattern, 0, len(in))
 	for _, kp := range in {
-		key := normalizeForDedup(kp.Pattern) + "|" + sortedFieldNames(kp.Pattern)
+		key := normalizeForDedup(kp.Pattern) + "|" +
+			sortedFieldNames(kp.Pattern) + "|" +
+			customPatternsKey(kp.CustomPatterns)
 		if _, dup := seen[key]; dup {
 			continue
 		}
@@ -44,6 +46,29 @@ func dedupKnownPatterns(in []KnownPattern) []KnownPattern {
 		out = append(out, kp)
 	}
 	return out
+}
+
+// customPatternsKey produces a stable serialization of a CustomPatterns
+// map suitable for use in a dedup key. Two entries with the same Pattern
+// text but different CustomPatterns must not collapse, since their
+// effective regex bodies differ.
+func customPatternsKey(m map[string]string) string {
+	if len(m) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, k := range keys {
+		b.WriteString(k)
+		b.WriteByte('=')
+		b.WriteString(m[k])
+		b.WriteByte('\x00')
+	}
+	return b.String()
 }
 
 var dedupSpaceRe = regexp.MustCompile(`\s+`)

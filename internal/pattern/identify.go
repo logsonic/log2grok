@@ -213,6 +213,17 @@ func renderJSONSkeleton(sample []string, source string) (string, string, bool) {
 	for _, key := range keys {
 		common[key] = true
 	}
+
+	if jsonKeyOrderIsStable(sample, keys) {
+		return renderJSONSkeletonOrdered(sample, shape, keys, common, source)
+	}
+	return renderJSONSkeletonUnordered(shape, keys, source)
+}
+
+// renderJSONSkeletonOrdered emits the legacy, order-locked shape: keys
+// must appear in their first-line order, separated by literal commas.
+// This produces the tightest pattern when producers are deterministic.
+func renderJSONSkeletonOrdered(sample []string, shape jsonShape, keys []string, common map[string]bool, source string) (string, string, bool) {
 	hasExtra := false
 	for key := range shape.KeyFreq {
 		if !common[key] {
@@ -220,7 +231,6 @@ func renderJSONSkeleton(sample []string, source string) (string, string, bool) {
 			break
 		}
 	}
-
 	parts := make([]string, 0, len(keys))
 	for _, key := range keys {
 		field := canonicalJSONFieldName(key)
@@ -231,7 +241,62 @@ func renderJSONSkeleton(sample []string, source string) (string, string, bool) {
 		grok += `(?:\s*,\s*%{GREEDYDATA:json_extra})?`
 	}
 	grok += `\s*\}`
+	_ = sample
 	return grok, source, true
+}
+
+// renderJSONSkeletonUnordered emits an order-tolerant shape: each key is
+// matched at any position inside the JSON object, with arbitrary other
+// `"k":v` pairs allowed before/between/after. Used when sample lines do
+// not all agree on key order (e.g. concatenated rotated logs from
+// different producers).
+//
+// The match for each key uses a non-greedy bridge `(?:[^{}]*?,\s*)?` so
+// it can skip preceding pairs without devouring the closing brace. We
+// require all common keys to appear, in any order, and treat anything
+// else as opaque body matched by `[^{}]*` segments.
+func renderJSONSkeletonUnordered(shape jsonShape, keys []string, source string) (string, string, bool) {
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		field := canonicalJSONFieldName(key)
+		// `(?:[^{}]*?,\s*)?` — optional non-greedy bridge of non-brace
+		// characters terminated by a comma. Keeps matches inside the
+		// current object and lets the key appear at any position.
+		parts = append(parts,
+			`(?:[^{}]*?,\s*)?"`+regexp.QuoteMeta(key)+`"\s*:\s*`+
+				jsonValueGrok(field, dominantJSONKind(shape, key)))
+	}
+	grok := `\{\s*` + strings.Join(parts, ``) + `[^{}]*\}`
+	return grok, source, true
+}
+
+// jsonKeyOrderIsStable returns true when every JSON line in sample emits
+// the targeted keys in the same relative order (extra keys interleaved
+// are allowed). When false, the renderer should produce an order-tolerant
+// pattern instead of an order-locked one.
+func jsonKeyOrderIsStable(sample []string, keys []string) bool {
+	target := make(map[string]int, len(keys))
+	for i, k := range keys {
+		target[k] = i
+	}
+	for _, line := range sample {
+		ordered := orderedJSONKeys(strings.TrimSpace(line))
+		if len(ordered) == 0 {
+			continue
+		}
+		last := -1
+		for _, k := range ordered {
+			idx, ok := target[k]
+			if !ok {
+				continue
+			}
+			if idx < last {
+				return false
+			}
+			last = idx
+		}
+	}
+	return true
 }
 
 func canonicalJSONFieldName(key string) string {
@@ -264,12 +329,44 @@ func canonicalJSONFieldName(key string) string {
 	repl := strings.NewReplacer(".", "_", "-", "_", "@", "", "/", "_")
 	name := canonicalName(repl.Replace(key))
 	if !isValidName(name) {
+		// Replace any remaining non-alphanumeric/underscore characters
+		// with underscores, then collapse runs and trim. This keeps key
+		// information visible for keys with characters not in the
+		// targeted replacer above (spaces, colons, etc.).
+		name = sanitizeJSONField(key)
+	}
+	if !isValidName(name) {
 		name = "field_" + strings.TrimLeft(name, "_")
 	}
 	if !isValidName(name) {
 		return "field"
 	}
 	return name
+}
+
+func sanitizeJSONField(key string) string {
+	out := make([]byte, 0, len(key))
+	for i := 0; i < len(key); i++ {
+		c := key[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '_':
+			out = append(out, c)
+		default:
+			if len(out) > 0 && out[len(out)-1] != '_' {
+				out = append(out, '_')
+			}
+		}
+	}
+	for len(out) > 0 && out[len(out)-1] == '_' {
+		out = out[:len(out)-1]
+	}
+	if len(out) == 0 {
+		return ""
+	}
+	if out[0] >= '0' && out[0] <= '9' {
+		out = append([]byte{'_'}, out...)
+	}
+	return strings.ToLower(string(out))
 }
 
 func jsonValueGrok(field, kind string) string {
@@ -547,9 +644,16 @@ func looksLikeW3C(sample []string) bool {
 func renderW3C(sample []string) (string, string, bool) {
 	fieldsLine := ""
 	for _, line := range sample {
-		if strings.HasPrefix(line, "#Fields:") {
-			fieldsLine = line
+		if !strings.HasPrefix(line, "#Fields:") {
+			continue
 		}
+		if fieldsLine != "" && fieldsLine != line {
+			// Multiple distinct #Fields: headers in the same input
+			// (e.g. concatenated rotations with different schemas).
+			// Refuse to guess a schema; let other stages handle it.
+			return "", "", false
+		}
+		fieldsLine = line
 	}
 	if fieldsLine == "" {
 		return "", "", false

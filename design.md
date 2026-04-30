@@ -12,7 +12,7 @@ Entry: `pkg/log2grok/api.go` → `internal/pattern.Discover()` (`internal/patter
 input lines
    │
    ▼
-normalizeLines  ── strip BOM, drop blanks
+normalizeLines  ── strip BOM (byte order marks), drop blanks
    │
    ▼
 chooseSample    ── first 1024 + stratified sample, cap 4096

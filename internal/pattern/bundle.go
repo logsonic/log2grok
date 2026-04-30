@@ -54,8 +54,13 @@ func loadBundledPacks() {
 		}
 		sort.Strings(names)
 		for _, name := range names {
-			body := convertPCREToRE2(entries[name])
+			raw := entries[name]
+			body := convertPCREToRE2(raw)
 			if body == "" {
+				if hasBackreference(raw) {
+					BundledLoadDiagnostics = append(BundledLoadDiagnostics,
+						fmt.Errorf("pack %s: dropped %q (contains backreference)", pack.Name, name))
+				}
 				continue
 			}
 			if _, ok := GrokPrimitives[name]; ok {
@@ -75,8 +80,13 @@ func loadBundledPacks() {
 					fmt.Errorf("pack %s: missing top-level %q", pack.Name, top.PrimitiveName))
 				continue
 			}
-			body = convertPCREToRE2(body)
+			rawBody := body
+			body = convertPCREToRE2(rawBody)
 			if body == "" {
+				if hasBackreference(rawBody) {
+					BundledLoadDiagnostics = append(BundledLoadDiagnostics,
+						fmt.Errorf("pack %s: dropped top-level %q (contains backreference)", pack.Name, top.PrimitiveName))
+				}
 				continue
 			}
 			KnownPatternsBundled = append(KnownPatternsBundled, KnownPattern{
@@ -132,6 +142,11 @@ func parsePackText(text string) map[string]string {
 // constructs into RE2-compatible forms. Returns the empty string when the
 // pattern can't be safely converted (caller drops it).
 func convertPCREToRE2(s string) string {
+	// Backreferences are unsupported by RE2 and have no safe rewrite.
+	// Drop the pattern outright; loadBundledPacks records a diagnostic.
+	if hasBackreference(s) {
+		return ""
+	}
 	// 1. Logstash named groups → Go form.
 	s = logstashNamedGroupRe.ReplaceAllString(s, `(?P<$1>`)
 	// 2. Atomic groups (?>...) → non-capturing.
@@ -143,13 +158,71 @@ func convertPCREToRE2(s string) string {
 	return s
 }
 
+// hasBackreference detects PCRE backreferences (\1..\9, \k<name>, (?P=name))
+// in a regex body. Honors backslash escapes and character-class context.
+func hasBackreference(s string) bool {
+	inClass := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == '\\' && i+1 < len(s) {
+			next := s[i+1]
+			if !inClass && next >= '1' && next <= '9' {
+				return true
+			}
+			if !inClass && next == 'k' {
+				return true
+			}
+			i++
+			continue
+		}
+		if inClass {
+			if c == ']' {
+				inClass = false
+			}
+			continue
+		}
+		if c == '[' {
+			inClass = true
+			continue
+		}
+		if c == '(' && i+3 < len(s) && s[i+1] == '?' && s[i+2] == 'P' && s[i+3] == '=' {
+			return true
+		}
+	}
+	return false
+}
+
 func stripLookaround(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
 	i := 0
+	inClass := false
 	for i < len(s) {
-		// Detect (?= (?! (?<= (?<!
-		if i+3 < len(s) && s[i] == '(' && s[i+1] == '?' {
+		c := s[i]
+		// Honor backslash escapes — copy the escape pair through verbatim
+		// so that e.g. \( inside a regex isn't mistaken for a group open.
+		if c == '\\' && i+1 < len(s) {
+			b.WriteByte(c)
+			b.WriteByte(s[i+1])
+			i += 2
+			continue
+		}
+		if inClass {
+			if c == ']' {
+				inClass = false
+			}
+			b.WriteByte(c)
+			i++
+			continue
+		}
+		if c == '[' {
+			inClass = true
+			b.WriteByte(c)
+			i++
+			continue
+		}
+		// Detect (?= (?! (?<= (?<! outside character classes only.
+		if i+3 < len(s) && c == '(' && s[i+1] == '?' {
 			head := s[i+2]
 			isLookahead := head == '=' || head == '!'
 			isLookbehind := false
@@ -157,7 +230,6 @@ func stripLookaround(s string) string {
 				isLookbehind = true
 			}
 			if isLookahead || isLookbehind {
-				// Find matching ).
 				end := matchParen(s, i)
 				if end > 0 {
 					i = end + 1
@@ -165,7 +237,7 @@ func stripLookaround(s string) string {
 				}
 			}
 		}
-		b.WriteByte(s[i])
+		b.WriteByte(c)
 		i++
 	}
 	return b.String()
@@ -209,21 +281,52 @@ func matchParen(s string, idx int) int {
 func stripPossessive(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
+	inClass := false
+	prevEscaped := false
 	for i := 0; i < len(s); i++ {
 		c := s[i]
-		if (c == '*' || c == '+' || c == '?' || c == '}') && i+1 < len(s) && s[i+1] == '+' {
-			// Check this isn't already consumed by the previous loop step.
+		// Backslash escapes: copy the pair through verbatim and remember
+		// that the next byte is a literal (not a metacharacter).
+		if c == '\\' && i+1 < len(s) {
+			b.WriteByte(c)
+			b.WriteByte(s[i+1])
+			i++
+			prevEscaped = true
+			continue
+		}
+		if inClass {
+			if c == ']' {
+				inClass = false
+			}
+			b.WriteByte(c)
+			prevEscaped = false
+			continue
+		}
+		if c == '[' {
+			inClass = true
+			b.WriteByte(c)
+			prevEscaped = false
+			continue
+		}
+		// Possessive quantifier candidate: only valid when the preceding
+		// metacharacter is a real (unescaped) quantifier, and we are not
+		// inside a character class.
+		if !prevEscaped &&
+			(c == '*' || c == '+' || c == '?' || c == '}') &&
+			i+1 < len(s) && s[i+1] == '+' {
 			if c == '+' && i > 0 && s[i-1] == '+' {
-				// Already a "++" tail of a previous match — write as-is.
+				// Already the "++" tail of a previous match — write as-is.
 				b.WriteByte(c)
+				prevEscaped = false
 				continue
 			}
 			b.WriteByte(c)
-			// Skip the trailing +.
 			i++
+			prevEscaped = false
 			continue
 		}
 		b.WriteByte(c)
+		prevEscaped = false
 	}
 	return b.String()
 }

@@ -16,6 +16,14 @@ func EvaluateCoverage(re *regexp.Regexp, lines []string) int {
 	return n
 }
 
+// evaluateCoverageWithFloor scans lines counting matches, returning early
+// if the candidate cannot strictly exceed `floor`. The caller (currently
+// betterCandidate) compares with strict `>`, so we prune when the best
+// achievable final count is `<= floor`. The returned partial count is
+// intentionally not the true match count when pruning fires; it is only
+// guaranteed to be `<= floor`. Callers MUST NOT use the return value for
+// any comparison weaker than `>`, or they will rank pruned candidates
+// incorrectly.
 func evaluateCoverageWithFloor(re *regexp.Regexp, lines []string, floor int) int {
 	if re == nil {
 		return 0
@@ -25,7 +33,7 @@ func evaluateCoverageWithFloor(re *regexp.Regexp, lines []string, floor int) int
 		if re.MatchString(line) {
 			n++
 		}
-		if floor >= 0 && n+(len(lines)-i-1) < floor {
+		if floor >= 0 && n+(len(lines)-i-1) <= floor {
 			return n
 		}
 	}

@@ -180,9 +180,15 @@ func weakFieldName(s string) bool {
 	switch s {
 	case "a", "an", "and", "as", "at", "by", "for", "from", "in", "into", "of", "on", "or", "the", "to", "with":
 		return true
-	default:
-		return false
 	}
+	// Very short tokens carry too little information to be useful as
+	// field names — unless they were already canonicalised into a known
+	// alias (e.g. "ts" → "timestamp"), in which case canonicalName has
+	// already widened them and they will not appear here.
+	if len(s) < 3 {
+		return true
+	}
+	return false
 }
 
 var canonicalNames = map[string]string{

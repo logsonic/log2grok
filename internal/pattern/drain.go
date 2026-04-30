@@ -1,6 +1,9 @@
 package pattern
 
-import "errors"
+import (
+	"errors"
+	"sort"
+)
 
 // drainBackend is the abstraction the rest of the package depends on.
 // The default implementation, defaultDrainBackend, calls into axiomhq/drain3.
@@ -61,6 +64,14 @@ func trainDrainWith(b drainBackend, lines []string) ([]cluster, error) {
 			SampleLineIdx: idx,
 		})
 	}
+	// Sort clusters by LineCount desc so callers can rely on out[0] being
+	// the dominant cluster regardless of upstream drain3 ordering.
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].LineCount != out[j].LineCount {
+			return out[i].LineCount > out[j].LineCount
+		}
+		return out[i].ID < out[j].ID
+	})
 	return out, nil
 }
 

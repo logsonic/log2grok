@@ -98,7 +98,7 @@ var GrokPrimitives = map[string]string{
 	"UNIXMS":             `\d{13}`,
 	"DURATION":           `\d+(?:\.\d+)?(?:ns|us|µs|ms|s|m|h)`,
 	"SYSLOG5424SD":       `\[(?:[A-Za-z0-9@._-]+)(?: [A-Za-z0-9@._-]+=(?:"(?:\\.|[^"\\])*"))*\](?:\[(?:[A-Za-z0-9@._-]+)(?: [A-Za-z0-9@._-]+=(?:"(?:\\.|[^"\\])*"))*\])*`,
-	"SYSLOGFACILITY":     `<%{NONNEGINT:facility}.%{NONNEGINT:priority}>`,
+	"SYSLOGFACILITY":     `<%{NONNEGINT:facility}\.%{NONNEGINT:priority}>`,
 	"SYSLOGPROG":         `%{PROG}(?:\[%{POSINT:pid}\])?`,
 	"SYSLOGBASE":         `%{SYSLOGTIMESTAMP:timestamp} %{SYSLOGHOST:logsource} %{SYSLOGPROG}:`,
 	"SYSLOGHOST":         `%{IPORHOST}`,

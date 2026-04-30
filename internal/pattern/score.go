@@ -69,14 +69,28 @@ func scoreLibraryOnSample(sample []string) []candidateResult {
 	return out
 }
 
-// betterCandidate compares by integer match count first, then specificity,
-// then typed-capture density (fewer GREEDYDATA), then declaration priority.
+// betterCandidate compares two library-stage candidates. Order:
+//  1. higher match count
+//  2. more typed captures (objective measure of how much of the line is
+//     parsed; aligns with pickBetter's cross-stage ranking)
+//  3. higher specificity (editorial nudge for hand-written entries)
+//  4. fewer GREEDYDATA references
+//  5. lower declaration priority
+//
+// Specificity sits below typed-capture count so that an entry which only
+// captures `timestamp + GREEDYDATA` does not beat a structurally richer
+// peer purely on hand-set specificity numbers.
 func betterCandidate(next, best *candidateResult) bool {
 	if best == nil {
 		return true
 	}
 	if next.Matched != best.Matched {
 		return next.Matched > best.Matched
+	}
+	nextTyped := typedCaptureCount(next.Pattern.Pattern)
+	bestTyped := typedCaptureCount(best.Pattern.Pattern)
+	if nextTyped != bestTyped {
+		return nextTyped > bestTyped
 	}
 	if next.Pattern.Specificity != best.Pattern.Specificity {
 		return next.Pattern.Specificity > best.Pattern.Specificity

@@ -10,11 +10,17 @@ type tokenSpan struct {
 // tokenSpansOf locates each tokens[i] inside line in order. Two equal tokens
 // in a line still get distinct spans because the search advances past each
 // match before the next lookup.
+//
+// Empty tokens (which the Tokenize implementation can emit when extra
+// delimiters collapse together) get a zero-width span at the current
+// cursor. The drain wildcard sentinel "<*>" is not expected here — callers
+// pass concrete sample tokens, never templates — but we treat it as empty
+// for safety.
 func tokenSpansOf(line string, tokens []string) []tokenSpan {
 	out := make([]tokenSpan, 0, len(tokens))
 	cursor := 0
 	for _, tok := range tokens {
-		if tok == "<*>" || tok == "" {
+		if tok == "" {
 			out = append(out, tokenSpan{Start: cursor, End: cursor})
 			continue
 		}

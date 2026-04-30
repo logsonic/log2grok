@@ -44,6 +44,13 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 		Verbose:          opts.Verbose,
 		Diagnostics:      opts.Diagnostics,
 	}
+	// Add a safety check for lines length
+	if len(lines) == 0 {
+		return nil, errors.New("log2grok: no input lines")
+	}	
+	if len(lines) > 100000 {
+		return nil, errors.New("log2grok: input lines too long, max is 100000")
+	}
 	dp, err := pattern.Discover(lines, internalOpts)
 	if err != nil {
 		if errors.Is(err, pattern.ErrEmptyInput) {
