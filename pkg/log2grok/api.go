@@ -9,7 +9,7 @@ import (
 	"io"
 	"regexp"
 
-	"log2grok/internal/pattern"
+	"github.com/logsonic/log2grok/internal/pattern"
 )
 
 // DiscoveredPattern is what Discover returns. ONE per call. Not a list.

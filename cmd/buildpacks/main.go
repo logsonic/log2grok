@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"os"
 
-	"log2grok/internal/pattern"
+	"github.com/logsonic/log2grok/internal/pattern"
 )
 
 func main() {

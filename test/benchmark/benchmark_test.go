@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"log2grok/internal/pattern"
+	"github.com/logsonic/log2grok/internal/pattern"
 )
 
 type benchCase struct {

@@ -8,7 +8,7 @@ import (
 	"io"
 	"os"
 
-	l2g "log2grok/pkg/log2grok"
+	l2g "github.com/logsonic/log2grok/pkg/log2grok"
 )
 
 func main() {
