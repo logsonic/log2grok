@@ -10,6 +10,67 @@ $ log2grok /var/log/nginx/access.log
 
 For the full product spec, see [`SPEC.md`](SPEC.md). For the implementation walkthrough and how to extend the library, see [`design.md`](design.md).
 
+## Install
+
+As a CLI:
+
+```sh
+go install github.com/logsonic/log2grok/cmd/log2grok@latest
+```
+
+As a Go library:
+
+```sh
+go get github.com/logsonic/log2grok@latest
+```
+
+## Use as a Go library
+
+The public API lives under `github.com/logsonic/log2grok/pkg/log2grok`. Pass the
+log lines you want to analyze; get back the single best Grok pattern.
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+
+	l2g "github.com/logsonic/log2grok/pkg/log2grok"
+)
+
+func main() {
+	lines := []string{
+		`10.0.0.1 - alice [15/Jan/2025:10:23:45 +0000] "GET /index.html HTTP/1.1" 200 1024`,
+		`10.0.0.2 - bob   [15/Jan/2025:10:23:46 +0000] "POST /api HTTP/1.1" 201 0`,
+	}
+
+	dp, err := l2g.Discover(lines, l2g.Options{})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("grok:    ", dp.Grok)
+	fmt.Println("source:  ", dp.Source)
+	fmt.Printf("coverage: %.1f%% (%d / %d lines)\n",
+		dp.Coverage*100, dp.MatchedCount, dp.TotalLines)
+
+	re, err := l2g.CompileGrok(dp.Grok, dp.CustomPatterns)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, m := range re.FindStringSubmatch(lines[0]) {
+		fmt.Println("  capture:", m)
+	}
+}
+```
+
+Exported surface: `Discover`, `Options`, `DiscoveredPattern`, `CompileGrok`,
+`EvaluateCoverage`, `LibraryDiagnostics`, `LoadConfig`, `ResetConfig`,
+`DefaultConfigDirName`, `ErrEmptyInput`. The `internal/pattern` package is
+intentionally not importable per Go's [`internal/`](https://go.dev/ref/spec#Package_paths)
+rule — `pkg/log2grok` is the stable API boundary.
+
 ## Discovery Pipeline
 
 `Discover` runs three independent stages and returns the single best Grok pattern across them. The stages are:
