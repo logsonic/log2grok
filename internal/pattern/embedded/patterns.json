@@ -1,0 +1,521 @@
+[
+  {
+    "name": "Traefik Access",
+    "pattern": "%{IPORHOST:client_ip} %{USER:ident} %{USER:auth} \\[%{HTTPDATE:timestamp}\\] \"%{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version}\" %{INT:status} %{INT:bytes}(?: \"%{DATA:referrer}\" \"%{DATA:user_agent}\")? %{INT:req_id} \"%{DATA:frontend}\" \"%{DATA:backend}\" %{INT:duration}ms",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "UFW Kernel",
+    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} kernel: \\[UFW %{WORD:action}\\] %{GREEDYDATA:details}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "Iptables Kernel",
+    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} kernel: \\[%{NUMBER:uptime}\\] %{GREEDYDATA:iptables}",
+    "priority": 2,
+    "specificity": 98
+  },
+  {
+    "name": "Cassandra Log",
+    "pattern": "%{LOGLEVEL:level}\\s+\\[%{NOTSPACE:thread}\\]\\s+%{TIMESTAMP_ISO8601:timestamp}\\s+%{NOTSPACE:class}:%{INT:line}\\s+-\\s+%{GREEDYDATA:message}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "Celery Log",
+    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp},000: %{LOGLEVEL:level}/%{NOTSPACE:process}\\] %{GREEDYDATA:message}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "Consul Log",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} \\[%{LOGLEVEL:level}\\]\\s+agent: %{GREEDYDATA:message}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "Cron Log",
+    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} CRON\\[%{POSINT:pid}\\]: %{GREEDYDATA:message}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "Django Error",
+    "pattern": "%{LOGLEVEL:level} %{TIMESTAMP_ISO8601:timestamp} %{NOTSPACE:module} %{GREEDYDATA:message}",
+    "priority": 3,
+    "specificity": 95
+  },
+  {
+    "name": "Django Request",
+    "pattern": "\\[%{HTTPDATE_CONDENSED:timestamp}\\] \"%{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version}\" %{INT:status} %{INT:bytes}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "Docker Compose",
+    "pattern": "%{NOTSPACE:service}\\s+\\|\\s+\\[%{TIMESTAMP_ISO8601:timestamp}\\] %{LOGLEVEL:level} %{NOTSPACE:logger}: %{GREEDYDATA:message}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "Elasticsearch Strict",
+    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\]\\[%{LOGLEVEL:level}\\s*\\]\\[%{NOTSPACE:module}\\s*\\]\\s*\\[%{NOTSPACE:node}\\]\\s*%{GREEDYDATA:message}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "Envoy Access Lite",
+    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\] \"%{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version}\" %{INT:status} - %{INT:bytes_sent} %{INT:bytes_received} %{INT:duration_ms} \"-\" \"%{DATA:user_agent}\" \"%{DATA:request_id}\" \"%{DATA:upstream_cluster}\" \"-\"",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "Envoy Text Error",
+    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\]\\[%{INT:thread}\\]\\[%{LOGLEVEL:level}\\]\\[%{NOTSPACE:component}\\] %{GREEDYDATA:message}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "Fastly Syslog",
+    "pattern": "<%{INT:priority}>%{TIMESTAMP_ISO8601:timestamp} %{NOTSPACE:cache} %{NOTSPACE:service} %{IP:client_ip} %{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version} %{INT:status} %{INT:bytes}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "Flask Dev Log",
+    "pattern": "%{IPORHOST:client_ip} - %{USER:ident} \\[%{HTTPDATE_CONDENSED:timestamp}\\] \"%{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version}\" %{INT:status} -",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "Go Std Log",
+    "pattern": "%{YEAR}/%{MONTHNUM2}/%{MONTHDAY2} %{TIME:time} %{NOTSPACE:file}:%{INT:line}: %{GREEDYDATA:message}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "Gunicorn Error",
+    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\] \\[%{INT:pid}\\] \\[%{LOGLEVEL:level}\\] %{GREEDYDATA:message}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "Kafka Component",
+    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\]\\s+%{LOGLEVEL:level}\\s+\\[%{DATA:component}\\]\\s+%{GREEDYDATA:message}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "MySQL Error Strict",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} %{INT:thread_id} \\[%{LOGLEVEL:level}\\] \\[%{NOTSPACE:error_code}\\] \\[%{WORD:component}\\] %{GREEDYDATA:message}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "NATS Log",
+    "pattern": "\\[%{INT:nats_seq}\\] %{YEAR}/%{MONTHNUM2}/%{MONTHDAY2} %{TIME:time} \\[%{LOGLEVEL:level}\\]\\s+%{IPORHOST:peer}:%{INT:peer_port}\\s+-\\s+cid:%{INT:client_id}\\s+-\\s+%{GREEDYDATA:message}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "Nomad Log",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} \\[%{LOGLEVEL:level}\\]\\s+client\\.alloc_runner\\.task_runner: %{GREEDYDATA:message}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "PM2 Log",
+    "pattern": "%{INT:id}\\|%{NOTSPACE:app}\\s+\\|\\s+%{TIMESTAMP_ISO8601:timestamp}: %{GREEDYDATA:message}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "Python Bracket Log",
+    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\]\\s+\\[%{LOGLEVEL:level}\\]\\s+\\[%{NOTSPACE:logger}:%{INT:pid}\\]\\s+%{GREEDYDATA:message}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "RabbitMQ Log",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} \\[%{LOGLEVEL:level}\\]\\s+<%{NOTSPACE:pid}>\\s+%{GREEDYDATA:message}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "Rails Default",
+    "pattern": "%{WORD:level}, \\[%{TIMESTAMP_ISO8601:timestamp} #%{INT:pid}\\]\\s+%{LOGLEVEL:level2}\\s+--\\s+: %{GREEDYDATA:message}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "Serilog Text",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} \\[%{LOGLEVEL:level}\\] %{GREEDYDATA:message}",
+    "priority": 4,
+    "specificity": 88
+  },
+  {
+    "name": "Snort Bracket Alert",
+    "pattern": "\\[\\*\\*\\]\\s+\\[%{NOTSPACE:gid}:%{NOTSPACE:sid}:\\d+\\]\\s+%{DATA:msg}\\s+\\[\\*\\*\\]\\s+\\[Classification: %{DATA:classification}\\]\\s+\\[Priority: %{INT:priority}\\]\\s+%{MONTHNUM2}/%{MONTHDAY2}-%{TIME:time}\\s+%{IP:src_ip}:%{INT:src_port}\\s+->\\s+%{IP:dst_ip}:%{INT:dst_port}\\s+%{GREEDYDATA:rest}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "Sudo Command",
+    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} sudo:\\s+%{NOTSPACE:user}\\s+:.*?USER=root\\s*;\\s*COMMAND=%{GREEDYDATA:command}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "Tomcat Catalina Day",
+    "pattern": "%{MONTHDAY2}-%{MONTH}-%{YEAR} %{TIME:time} %{LOGLEVEL:level} \\[%{PROCID:thread}\\] %{GREEDYDATA:message}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "AWS S3 Access",
+    "pattern": "%{NOTSPACE:bucket_owner} %{NOTSPACE:bucket} \\[%{HTTPDATE:timestamp}\\] %{IP:client_ip} %{NOTSPACE:requester} %{NOTSPACE:request_id} %{PROCID:operation} %{NOTSPACE:key} \"(?:%{WORD:method} %{NOTSPACE:url}(?: HTTP/%{NUMBER:http_version})?|-)\" (?:%{INT:status}|-) (?:%{INT:error_code}|-) (?:%{INT:bytes_sent}|-) (?:%{INT:object_size}|-) (?:%{INT:request_time}|-) (?:%{INT:turnaround_time}|-) \"%{DATA:referrer}\" \"%{DATA:user_agent}\" %{GREEDYDATA:rest}",
+    "priority": 1,
+    "specificity": 99
+  },
+  {
+    "name": "Nginx Access Combined",
+    "pattern": "%{IPORHOST:client_ip} %{USER:ident} %{USER:auth} \\[%{HTTPDATE:timestamp}\\] \"%{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version}\" %{INT:status} (?:%{INT:bytes}|-) \"%{DATA:referrer}\" \"%{DATA:user_agent}\"",
+    "priority": 10,
+    "specificity": 90
+  },
+  {
+    "name": "Nginx Access Main With Timing",
+    "pattern": "%{IPORHOST:client_ip} %{USER:ident} %{USER:auth} \\[%{HTTPDATE:timestamp}\\] \"%{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version}\" %{INT:status} (?:%{INT:bytes}|-) \"%{DATA:referrer}\" \"%{DATA:user_agent}\" \"%{DATA:x_forwarded_for}\" rt=%{NUMBER:request_time} uct=\"%{DATA:upstream_connect_time}\" uht=\"%{DATA:upstream_header_time}\" urt=\"%{DATA:upstream_response_time}\"",
+    "priority": 11,
+    "specificity": 98
+  },
+  {
+    "name": "Nginx Error",
+    "pattern": "%{YEAR}/%{MONTHNUM}/%{MONTHDAY} %{TIME:time} \\[%{LOGLEVEL:level}\\] %{INT:pid}#%{INT:tid}: (?:\\*%{INT:connection} )?%{GREEDYDATA:message}",
+    "priority": 12,
+    "specificity": 95
+  },
+  {
+    "name": "Apache Common",
+    "pattern": "%{IPORHOST:client_ip} %{USER:ident} %{USER:auth} \\[%{HTTPDATE:timestamp}\\] \"%{WORD:method} %{NOTSPACE:url}(?: HTTP/%{NUMBER:http_version})?\" %{INT:status} (?:%{INT:bytes}|-)",
+    "priority": 13,
+    "specificity": 88
+  },
+  {
+    "name": "Apache Combined",
+    "pattern": "%{IPORHOST:client_ip} %{USER:ident} %{USER:auth} \\[%{HTTPDATE:timestamp}\\] \"%{WORD:method} %{NOTSPACE:url}(?: HTTP/%{NUMBER:http_version})?\" %{INT:status} (?:%{INT:bytes}|-) \"%{DATA:referrer}\" \"%{DATA:user_agent}\"",
+    "priority": 13,
+    "specificity": 90
+  },
+  {
+    "name": "Apache Vhost Combined",
+    "pattern": "%{IPORHOST:vhost}:%{INT:vhost_port} %{IPORHOST:client_ip} %{USER:ident} %{USER:auth} \\[%{HTTPDATE:timestamp}\\] \"%{WORD:method} %{NOTSPACE:url}(?: HTTP/%{NUMBER:http_version})?\" %{INT:status} (?:%{INT:bytes}|-) \"%{DATA:referrer}\" \"%{DATA:user_agent}\"",
+    "priority": 13,
+    "specificity": 92
+  },
+  {
+    "name": "Apache Error",
+    "pattern": "\\[%{APACHE_ERROR_TIME:timestamp}\\] \\[%{DATA:module}:%{LOGLEVEL:level}\\](?: \\[pid %{INT:pid}(?::tid %{INT:tid})?\\])?(?: \\[client %{IPORHOST:client_ip}:%{INT:client_port}\\])? %{GREEDYDATA:message}",
+    "priority": 14,
+    "specificity": 95,
+    "customPatterns": {
+      "APACHE_ERROR_TIME": "[A-Za-z]{3} [A-Za-z]{3}\\s+\\d{1,2} %{TIME}(?:\\.\\d+)? \\d{4}"
+    }
+  },
+  {
+    "name": "Caddy Access",
+    "pattern": "%{IPORHOST:client_ip} - %{USER:auth} \\[%{HTTPDATE:timestamp}\\] \"%{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version}\" %{INT:status} %{INT:bytes}",
+    "priority": 15,
+    "specificity": 88
+  },
+  {
+    "name": "Morgan Common",
+    "pattern": "%{IPORHOST:client_ip} - %{USER:auth} \\[%{HTTPDATE:timestamp}\\] \"%{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version}\" %{INT:status} %{INT:bytes}",
+    "priority": 16,
+    "specificity": 86
+  },
+  {
+    "name": "Envoy Access",
+    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\] \"%{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version}\" %{INT:status} %{NOTSPACE:response_flags} %{INT:bytes_received} %{INT:bytes_sent} %{INT:duration} %{NOTSPACE:upstream_service_time} \"%{DATA:x_forwarded_for}\" \"%{DATA:user_agent}\" \"%{DATA:request_id}\" \"%{DATA:authority}\" \"%{DATA:upstream_host}\"",
+    "priority": 17,
+    "specificity": 96
+  },
+  {
+    "name": "Syslog RFC3164",
+    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} %{PROG:program}(?:\\[%{POSINT:pid}\\])?: %{GREEDYDATA:message}",
+    "priority": 30,
+    "specificity": 75
+  },
+  {
+    "name": "Syslog RFC5424",
+    "pattern": "<%{POSINT:priority}>%{NONNEGINT:version} %{TIMESTAMP_ISO8601:timestamp} %{HOSTNAME:hostname} %{NOTSPACE:app_name} %{NOTSPACE:proc_id} %{NOTSPACE:msg_id} (?:-|%{SYSLOG5424SD:structured_data}) ?%{GREEDYDATA:message}",
+    "priority": 31,
+    "specificity": 90
+  },
+  {
+    "name": "SSH Authentication",
+    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} sshd\\[%{POSINT:pid}\\]: %{GREEDYDATA:message}",
+    "priority": 32,
+    "specificity": 95
+  },
+  {
+    "name": "Sudo",
+    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} sudo(?:\\[%{POSINT:pid}\\])?: %{GREEDYDATA:message}",
+    "priority": 33,
+    "specificity": 92
+  },
+  {
+    "name": "Cron",
+    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} (?:cron|CROND)(?:\\[%{POSINT:pid}\\])?: %{GREEDYDATA:message}",
+    "priority": 34,
+    "specificity": 90
+  },
+  {
+    "name": "Auditd Key Value",
+    "pattern": "type=%{WORD:audit_type} msg=audit\\(%{NUMBER:audit_epoch}:%{INT:audit_id}\\): %{GREEDYDATA:kvpairs}",
+    "priority": 35,
+    "specificity": 95
+  },
+  {
+    "name": "HAProxy HTTP",
+    "pattern": "%{IP:client_ip}:%{INT:client_port} \\[%{HTTPDATE:timestamp}\\] %{NOTSPACE:frontend_name} %{NOTSPACE:backend_name}/%{NOTSPACE:server_name} %{INT:t_request}/%{INT:t_queue}/%{INT:t_connect}/%{INT:t_response}/%{INT:t_total} %{INT:status} %{INT:bytes_read} %{NOTSPACE:req_cookie} %{NOTSPACE:resp_cookie} %{NOTSPACE:termination_state} %{INT:actconn}/%{INT:feconn}/%{INT:beconn}/%{INT:srvconn}/%{INT:retries} %{INT:srv_queue}/%{INT:backend_queue} \"(?:%{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version}|%{DATA:raw_request})\"",
+    "priority": 50,
+    "specificity": 98
+  },
+  {
+    "name": "HAProxy TCP",
+    "pattern": "%{IP:client_ip}:%{INT:client_port} \\[%{HTTPDATE:timestamp}\\] %{NOTSPACE:frontend_name} %{NOTSPACE:backend_name}/%{NOTSPACE:server_name} %{INT:t_queue}/%{INT:t_connect}/%{INT:t_total} %{INT:bytes_read} %{NOTSPACE:termination_state} %{INT:actconn}/%{INT:feconn}/%{INT:beconn}/%{INT:srvconn}/%{INT:retries} %{INT:srv_queue}/%{INT:backend_queue}",
+    "priority": 51,
+    "specificity": 97
+  },
+  {
+    "name": "AWS ALB",
+    "pattern": "%{WORD:type} %{TIMESTAMP_ISO8601:timestamp} %{NOTSPACE:elb_name} %{IP:client_ip}:%{INT:client_port} (?:%{IP:target_ip}:%{INT:target_port}|-) %{NUMBER:request_processing_time} %{NUMBER:target_processing_time} %{NUMBER:response_processing_time} %{INT:elb_status_code} (?:%{INT:target_status_code}|-) %{INT:received_bytes} %{INT:sent_bytes} \"%{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version}\" \"%{DATA:user_agent}\" %{NOTSPACE:ssl_cipher} %{NOTSPACE:ssl_protocol} %{NOTSPACE:target_group_arn} \"%{DATA:trace_id}\" \"%{DATA:domain_name}\" \"%{DATA:chosen_cert_arn}\" %{INT:matched_rule_priority} %{TIMESTAMP_ISO8601:request_creation_time} \"%{DATA:actions_executed}\" \"%{DATA:redirect_url}\" \"%{DATA:error_reason}\" \"%{DATA:target_port_list}\" \"%{DATA:target_status_code_list}\" \"%{DATA:classification}\" \"%{DATA:classification_reason}\"",
+    "priority": 52,
+    "specificity": 99
+  },
+  {
+    "name": "AWS CLB",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} %{NOTSPACE:elb_name} %{IP:client_ip}:%{INT:client_port} (?:%{IP:backend_ip}:%{INT:backend_port}|-) %{NUMBER:request_processing_time} %{NUMBER:backend_processing_time} %{NUMBER:response_processing_time} %{INT:elb_status_code} (?:%{INT:backend_status_code}|-) %{INT:received_bytes} %{INT:sent_bytes} \"%{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version}\"",
+    "priority": 53,
+    "specificity": 97
+  },
+  {
+    "name": "AWS NLB",
+    "pattern": "%{NOTSPACE:type} %{NOTSPACE:version} %{TIMESTAMP_ISO8601:timestamp} %{NOTSPACE:elb_name} %{NOTSPACE:listener} %{IP:client_ip}:%{INT:client_port} %{IP:target_ip}:%{INT:target_port} %{INT:tcp_connection_time_ms} %{INT:tls_handshake_time_ms} %{INT:received_bytes} %{INT:sent_bytes} %{NOTSPACE:incoming_tls_alert} %{NOTSPACE:chosen_cert_arn} %{NOTSPACE:chosen_cert_serial} %{NOTSPACE:tls_cipher} %{NOTSPACE:tls_protocol_version} %{NOTSPACE:tls_named_group} %{NOTSPACE:domain_name} %{NOTSPACE:alpn_fe_protocol} %{NOTSPACE:alpn_be_protocol} %{NOTSPACE:alpn_client_preference_list} %{NOTSPACE:tls_connection_creation_time}",
+    "priority": 54,
+    "specificity": 98
+  },
+  {
+    "name": "AWS VPC Flow Logs",
+    "pattern": "%{INT:version} %{NOTSPACE:account_id} %{NOTSPACE:interface_id} %{IP:src_addr} %{IP:dst_addr} %{INT:src_port} %{INT:dst_port} %{INT:protocol} %{INT:packets} %{INT:bytes} %{INT:start} %{INT:end} %{WORD:action} %{WORD:log_status}(?: %{GREEDYDATA:extra_fields})?",
+    "priority": 55,
+    "specificity": 98
+  },
+  {
+    "name": "CloudFront Standard",
+    "pattern": "%{DATE:date}\\t%{TIME:time}\\t%{NOTSPACE:edge_location}\\t%{INT:bytes}\\t%{IP:client_ip}\\t%{WORD:method}\\t%{NOTSPACE:host}\\t%{NOTSPACE:url}\\t%{INT:status}\\t%{NOTSPACE:referrer}\\t%{NOTSPACE:user_agent}\\t%{NOTSPACE:query_string}\\t%{NOTSPACE:cookie}\\t%{NOTSPACE:edge_result_type}\\t%{NOTSPACE:edge_request_id}\\t%{NOTSPACE:host_header}\\t%{NOTSPACE:protocol}\\t%{INT:cs_bytes}\\t%{NOTSPACE:time_taken}\\t%{GREEDYDATA:rest}",
+    "priority": 56,
+    "specificity": 96
+  },
+  {
+    "name": "CRI Containerd",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} %{WORD:stream} %{WORD:logtag} %{GREEDYDATA:message}",
+    "priority": 70,
+    "specificity": 88
+  },
+  {
+    "name": "Kubernetes Klog",
+    "pattern": "%{NOTSPACE:level_short}%{MONTHNUM2:month}%{MONTHDAY2:day} %{TIME:time}\\s+%{INT:thread_id} %{NOTSPACE:source_file}:%{INT:source_line}\\] %{GREEDYDATA:message}",
+    "priority": 71,
+    "specificity": 92
+  },
+  {
+    "name": "Spring Boot Default",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+%{INT:pid}\\s+---\\s+\\[%{DATA:thread}\\]\\s+%{JAVACLASS:logger}\\s+:\\s+%{GREEDYDATA:message}",
+    "priority": 80,
+    "specificity": 96,
+    "customPatterns": {
+      "JAVACLASS": "(?:[A-Za-z0-9_$]+\\.)*[A-Za-z0-9_$]+"
+    }
+  },
+  {
+    "name": "Log4j Logback",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+\\[%{DATA:thread}\\]\\s+%{JAVACLASS:logger}\\s+-\\s+%{GREEDYDATA:message}",
+    "priority": 81,
+    "specificity": 90,
+    "customPatterns": {
+      "JAVACLASS": "(?:[A-Za-z0-9_$]+\\.)*[A-Za-z0-9_$]+"
+    }
+  },
+  {
+    "name": "Tomcat Catalina",
+    "pattern": "%{MONTHNUM:month}-%{MONTHDAY:day}-%{YEAR:year} %{TIME:time} %{LOGLEVEL:level} \\[%{DATA:thread}\\] %{JAVACLASS:logger} - %{GREEDYDATA:message}",
+    "priority": 82,
+    "specificity": 90,
+    "customPatterns": {
+      "JAVACLASS": "(?:[A-Za-z0-9_$]+\\.)*[A-Za-z0-9_$]+"
+    }
+  },
+  {
+    "name": "Python Logging",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+%{NOTSPACE:logger}\\s+%{GREEDYDATA:message}",
+    "priority": 83,
+    "specificity": 85
+  },
+  {
+    "name": "Go Slog Text",
+    "pattern": "time=%{TIMESTAMP_ISO8601:timestamp} level=%{LOGLEVEL:level} msg=%{QUOTEDSTRING:message}(?: %{GREEDYDATA:kvpairs})?",
+    "priority": 84,
+    "specificity": 92
+  },
+  {
+    "name": "Winston Text",
+    "pattern": "(?:%{TIMESTAMP_ISO8601:timestamp}\\s+)?%{LOGLEVEL:level}:\\s+%{GREEDYDATA:message}",
+    "priority": 84,
+    "specificity": 82
+  },
+  {
+    "name": "Zap Console",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+%{NOTSPACE:logger}\\s+%{GREEDYDATA:message}",
+    "priority": 84,
+    "specificity": 86
+  },
+  {
+    "name": "Gunicorn Access",
+    "pattern": "%{IPORHOST:client_ip} - %{USER:auth} \\[%{HTTPDATE:timestamp}\\] \"%{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version}\" %{INT:status} %{INT:bytes} \"%{DATA:referrer}\" \"%{DATA:user_agent}\"",
+    "priority": 85,
+    "specificity": 88
+  },
+  {
+    "name": "Rails",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} %{LOGLEVEL:level}\\s+%{GREEDYDATA:message}",
+    "priority": 86,
+    "specificity": 70
+  },
+  {
+    "name": "PostgreSQL",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp}(?: %{TZ:timezone})? \\[%{POSINT:pid}\\](?: %{DATA:user_db})? %{LOGLEVEL:level}:\\s+%{GREEDYDATA:message}",
+    "priority": 110,
+    "specificity": 92
+  },
+  {
+    "name": "MySQL Error",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} %{INT:thread_id} \\[%{LOGLEVEL:level}\\] %{GREEDYDATA:message}",
+    "priority": 111,
+    "specificity": 90
+  },
+  {
+    "name": "Redis",
+    "pattern": "%{INT:pid}:%{WORD:role} %{MONTHDAY:day} %{MONTH:month} %{YEAR:year} %{TIME:time} %{REDISLEVEL:level} %{GREEDYDATA:message}",
+    "priority": 112,
+    "specificity": 90,
+    "customPatterns": {
+      "REDISLEVEL": "[.\\-*#]"
+    }
+  },
+  {
+    "name": "Redis Log Bracketed",
+    "pattern": "\\[%{POSINT:pid}\\] %{MONTHDAY:day} %{MONTH:month} %{TIME:time} \\* %{GREEDYDATA:message}",
+    "priority": 112,
+    "specificity": 88
+  },
+  {
+    "name": "MongoDB Text",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} %{WORD:severity} %{WORD:component}\\s+\\[%{DATA:context}\\] %{GREEDYDATA:message}",
+    "priority": 113,
+    "specificity": 92
+  },
+  {
+    "name": "MongoDB 3 Log",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} \\[%{DATA:component}\\] %{GREEDYDATA:message}",
+    "priority": 113,
+    "specificity": 88
+  },
+  {
+    "name": "Kafka",
+    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\] %{LOGLEVEL:level} %{GREEDYDATA:message} \\(%{JAVACLASS:logger}\\)",
+    "priority": 130,
+    "specificity": 90,
+    "customPatterns": {
+      "JAVACLASS": "(?:[A-Za-z0-9_$]+\\.)*[A-Za-z0-9_$]+"
+    }
+  },
+  {
+    "name": "Elasticsearch",
+    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\]\\[%{LOGLEVEL:level}\\s*\\]\\[%{DATA:component}\\] %{GREEDYDATA:message}",
+    "priority": 131,
+    "specificity": 92
+  },
+  {
+    "name": "ZooKeeper",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} \\[myid:?(?:%{INT:myid})?\\] - %{LOGLEVEL:level}\\s+\\[%{DATA:thread}\\] - %{GREEDYDATA:message}",
+    "priority": 132,
+    "specificity": 92
+  },
+  {
+    "name": "Nagios Log Line",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp}\\s+\\[%{WORD:facility}\\]\\s+%{GREEDYDATA:message}",
+    "priority": 140,
+    "specificity": 88
+  },
+  {
+    "name": "Squid Access",
+    "pattern": "%{NUMBER:timestamp}\\s+%{INT:duration} %{IP:client_ip} %{WORD:cache_result}/%{INT:status} %{INT:bytes} %{WORD:method} %{NOTSPACE:url} %{NOTSPACE:user} %{NOTSPACE:hierarchy}/%{IPORHOST:server} %{NOTSPACE:content_type}",
+    "priority": 150,
+    "specificity": 96
+  },
+  {
+    "name": "Snort Fast Alert",
+    "pattern": "%{NOTSPACE:timestamp} \\[\\*\\*\\] \\[%{DATA:sid}\\] %{DATA:msg} \\[\\*\\*\\] \\[Classification: %{DATA:classification}\\] \\[Priority: %{INT:priority}\\] \\{%{WORD:protocol}\\} %{IP:src_ip}(?::%{INT:src_port})? -> %{IP:dst_ip}(?::%{INT:dst_port})?",
+    "priority": 151,
+    "specificity": 95
+  },
+  {
+    "name": "Cisco ASA",
+    "pattern": "%{SYSLOGTIMESTAMP:timestamp}(?: %{HOSTNAME:hostname})? %%{ASA_TAG:tag}: %{GREEDYDATA:message}",
+    "priority": 152,
+    "specificity": 92,
+    "customPatterns": {
+      "ASA_TAG": "[A-Z]+-\\d-\\d+"
+    }
+  },
+  {
+    "name": "Fortinet Key Value",
+    "pattern": "date=%{DATE:date} time=%{TIME:time} devname=%{NOTSPACE:devname} %{GREEDYDATA:kvpairs}",
+    "priority": 153,
+    "specificity": 92
+  },
+  {
+    "name": "Generic ISO Timestamp Level Logger Message",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+%{NOTSPACE:logger}\\s+%{GREEDYDATA:message}",
+    "priority": 900,
+    "specificity": 20
+  },
+  {
+    "name": "Generic ISO Timestamp Level Message",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+%{GREEDYDATA:message}",
+    "priority": 910,
+    "specificity": 10
+  },
+  {
+    "name": "Generic Date Time Program Level Message",
+    "pattern": "%{DATE:date} %{TIME:time} %{PROG:program}(?:\\[%{INT:pid}\\])?: %{LOGLEVEL:level}: %{GREEDYDATA:message}",
+    "priority": 915,
+    "specificity": 12
+  },
+  {
+    "name": "Generic Bracketed Timestamp",
+    "pattern": "\\[?%{TIMESTAMP_ISO8601:timestamp}\\]?\\s+%{GREEDYDATA:message}",
+    "priority": 920,
+    "specificity": 5
+  },
+  {
+    "name": "Generic Syslog Timestamp Message",
+    "pattern": "%{SYSLOGTIMESTAMP:timestamp}\\s+%{GREEDYDATA:message}",
+    "priority": 930,
+    "specificity": 4
+  }
+]
