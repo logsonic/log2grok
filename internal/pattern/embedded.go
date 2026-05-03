@@ -54,6 +54,7 @@ func loadEmbeddedDefaults() error {
 	if err != nil {
 		return fmt.Errorf("patterns: %w", err)
 	}
+	FillEmptyDescriptionsInPlace(library)
 
 	GrokPrimitives = prim
 	GrokPrimitivesOverrides = GrokPrimitives
@@ -84,6 +85,26 @@ func decodePatterns(data []byte) ([]KnownPattern, error) {
 	}
 	return out, nil
 }
+
+// EncodePrimitives serializes a primitives map as the on-disk JSON shape
+// (a single JSON object), pretty-printed with two-space indent so the
+// file diffs cleanly when committed to source control.
+func EncodePrimitives(in map[string]string) ([]byte, error) {
+	return json.MarshalIndent(in, "", "  ")
+}
+
+// EncodePatterns serializes a slice of KnownPattern as the on-disk JSON
+// shape (a JSON array), pretty-printed with two-space indent.
+func EncodePatterns(in []KnownPattern) ([]byte, error) {
+	return json.MarshalIndent(in, "", "  ")
+}
+
+// FileNamePrimitives and FileNamePatterns expose the canonical filenames
+// used inside the externalized config directory.
+const (
+	FileNamePrimitives = fileNamePrimitives
+	FileNamePatterns   = fileNamePatterns
+)
 
 // RefreshLibrary recomputes derived structures (KnownPatterns) from the
 // current values of the source vars (GrokPrimitives,

@@ -13,6 +13,21 @@ import (
 // directory when LoadConfig is called without an explicit path.
 const DefaultConfigDirName = ".log2grok"
 
+// currentConfigDir holds the directory passed to the most recent
+// successful LoadConfig / ResetConfig call. It is consulted by the
+// admin APIs (UpsertLibraryEntry, RemoveLibraryEntry, etc.) so they
+// know where to persist edits. Empty string means LoadConfig has not
+// yet been invoked, in which case admin writes are rejected.
+var currentConfigDir string
+
+// CurrentConfigDir returns the directory most recently activated by
+// LoadConfig or ResetConfig. Returns "" when no externalized config is
+// active (either because the caller never called LoadConfig or because
+// the call failed before assigning).
+func CurrentConfigDir() string {
+	return currentConfigDir
+}
+
 // LoadConfig seeds and loads the per-project pattern library from disk.
 //
 // Behavior, per file:
@@ -47,6 +62,7 @@ func LoadConfig(dir string, warn io.Writer) error {
 		}
 	}
 
+	currentConfigDir = dir
 	RefreshLibrary()
 	return nil
 }
@@ -78,6 +94,7 @@ func ResetConfig(dir string, warn io.Writer) error {
 	if err := loadEmbeddedDefaults(); err != nil {
 		return err
 	}
+	currentConfigDir = dir
 	RefreshLibrary()
 	return nil
 }
@@ -140,6 +157,7 @@ func applyConfigBytes(name string, data []byte) error {
 		if err != nil {
 			return fmt.Errorf("parse %s: %w", name, err)
 		}
+		FillEmptyDescriptionsInPlace(v)
 		KnownPatternsLibrary = v
 	default:
 		return fmt.Errorf("unknown config file %q", name)

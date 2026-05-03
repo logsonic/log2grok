@@ -1,6 +1,7 @@
 package pattern
 
 import (
+	"fmt"
 	"regexp"
 	"sort"
 	"strings"
@@ -14,6 +15,28 @@ type KnownPattern struct {
 	Specificity    int               `json:"specificity"`
 	Description    string            `json:"description,omitempty"`
 	CustomPatterns map[string]string `json:"customPatterns,omitempty"`
+}
+
+// DefaultPatternDescription returns a short catalogue line for patterns
+// whose JSON omitted "description" (the embedded library historically
+// shipped name + grok body only).
+func DefaultPatternDescription(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	return fmt.Sprintf("Grok pattern for %s logs.", name)
+}
+
+// FillEmptyDescriptionsInPlace sets Description where it is blank, using
+// DefaultPatternDescription(Name). Call after unmarshalling patterns
+// from disk or embedded JSON so APIs and UIs always have copy to show.
+func FillEmptyDescriptionsInPlace(lib []KnownPattern) {
+	for i := range lib {
+		if strings.TrimSpace(lib[i].Description) == "" && strings.TrimSpace(lib[i].Name) != "" {
+			lib[i].Description = DefaultPatternDescription(lib[i].Name)
+		}
+	}
 }
 
 // KnownPatterns is the merged, deduplicated, sorted library.
