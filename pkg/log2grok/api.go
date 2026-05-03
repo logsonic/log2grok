@@ -87,3 +87,25 @@ func EvaluateCoverage(re *regexp.Regexp, lines []string) int {
 func LibraryDiagnostics() []error {
 	return pattern.LibraryDiagnostics()
 }
+
+// DefaultConfigDirName is the directory created in the current working
+// directory when LoadConfig is called without an explicit path.
+const DefaultConfigDirName = pattern.DefaultConfigDirName
+
+// LoadConfig seeds and loads the per-project pattern library from disk.
+//
+// On startup the embedded default JSON files are copied to dir if missing.
+// Existing files are loaded and replace the in-memory defaults; if a file
+// is corrupt it is moved to a timestamped backup, the embedded default is
+// re-seeded, and a warning is written to warn (when non-nil).
+//
+// Pass an empty dir to use ./.log2grok.
+func LoadConfig(dir string, warn io.Writer) error {
+	return pattern.LoadConfig(dir, warn)
+}
+
+// ResetConfig forcibly overwrites every file under dir with the embedded
+// default. Existing files are renamed to ".bak.<timestamp>" first.
+func ResetConfig(dir string, warn io.Writer) error {
+	return pattern.ResetConfig(dir, warn)
+}

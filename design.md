@@ -39,17 +39,20 @@ Each `structuredProbe` has a `Likely` predicate and a `Render` function. Probes 
 
 Why no field captures for CSV/TSV: column semantics aren't recoverable from delimiter-separated data alone, and the golden tests expect a literal shape that the user can decorate.
 
-### 2.2 Library (`library.go`, `library_curated.go`, `score.go`, `bundle.go`)
+### 2.2 Library (`library.go`, `library_curated.go`, `score.go`)
 
-`KnownPatterns` is the merged, deduped, sorted list of all library entries. Composition (in `composeKnownPatterns`, `bundle.go:96`):
+`KnownPatterns` is the deduped, sorted view of `KnownPatternsLibrary`, which is loaded verbatim from `internal/pattern/embedded/patterns.json` at init time (or replaced from `~/.log2grok/patterns.json` when `LoadConfig` is called). Composition lives in `composeKnownPatterns` (`library.go`):
 
 ```
-KnownPatternsGolden       (corpus-derived, specificity 88-99)
-    + KnownPatternsBundled   (logstash/vjeantet packs, specificity 25-30)
-    + KnownPatternsCurated   (hand-curated source-family patterns, 70-99)
-    + KnownPatternsCatchall  (last resort, specificity 4-20)
+KnownPatternsLibrary  (single ordered list; tier encoded by Priority)
     → dedup → sort
 ```
+
+Tier convention inside `patterns.json` (set by `Priority`):
+
+- `1–4` — corpus-derived "golden" entries; must win against generic catchalls.
+- `10–199` — curated source-family entries (web access ~10–19, system ~30–39, app ~80–99, db ~110–119, messaging ~130–139, security ~150–159).
+- `900–999` — generic catchalls; must remain last and low-specificity.
 
 Sort order: `Priority ASC`, then `Specificity DESC`, then `Name`.
 
@@ -69,7 +72,7 @@ Each `KnownPattern` may declare `CustomPatterns` (a private primitive map). `Dis
 
 ## 3. The Pattern DSL
 
-`CompileGrok(pattern, extras)` (`compile.go:24`) expands `%{NAME}`, `%{NAME:field}`, `%{NAME:field:type}` references into RE2, anchors with `^…\r?$`, and compiles. Resolution order for `NAME`: `extras` → `GrokPrimitives` (literal in `primitives.go`) → `GrokPrimitivesBundled` (loaded from packs).
+`CompileGrok(pattern, extras)` (`compile.go:24`) expands `%{NAME}`, `%{NAME:field}`, `%{NAME:field:type}` references into RE2, anchors with `^…\r?$`, and compiles. Resolution order for `NAME`: `extras` → `GrokPrimitives` (loaded from `internal/pattern/embedded/primitives.json`).
 
 Quirks worth remembering:
 
@@ -84,47 +87,46 @@ Pick the lowest-cost lever. In rough order of preference:
 
 ### 4.1 New Library Entry (most common)
 
-Most "support format X" requests reduce to: write one regex, drop it in `KnownPatternsCurated` or `KnownPatternsGolden`. Steps:
+Most "support format X" requests reduce to: write one regex, drop it as a new JSON object in `internal/pattern/embedded/patterns.json`. Steps:
 
 1. Pick a representative input. Write the Grok by hand:
-   ```go
+   ```json
    {
-       Name:        "Vector Access",
-       Pattern:     `\[%{TIMESTAMP_ISO8601:timestamp}\] %{LOGLEVEL:level} %{NOTSPACE:source} %{GREEDYDATA:message}`,
-       Priority:    50,
-       Specificity: 92,
+     "name": "Vector Access",
+     "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\] %{LOGLEVEL:level} %{NOTSPACE:source} %{GREEDYDATA:message}",
+     "priority": 50,
+     "specificity": 92
    }
    ```
 
 2. Specificity guide:
-   - **99**: corpus-exact match, only one shape (Golden tier).
-   - **90-95**: source-specific reference (Curated tier).
+   - **99**: corpus-exact match, only one shape.
+   - **90-95**: source-specific reference.
    - **70-85**: generic shape covering many sources.
    - **≤30**: catchall.
 
-3. Priority is a tie-breaker after specificity. Lower wins. Use the existing band for the family (web access ~10-19, system ~30-39, app ~80-99, db ~110-119, messaging ~130-139, security ~150-159, golden 1-4).
+3. Priority decides the tier and is a tie-breaker after specificity. Lower wins. Use the existing band for the family: golden ~1–4, web access ~10–19, system ~30–39, app ~80–99, db ~110–119, messaging ~130–139, security ~150–159, generic catchall ~900–930.
 
-4. If the pattern needs a primitive that doesn't exist, see §4.2. If the primitive is private to this entry only, attach it via `CustomPatterns`:
-   ```go
+4. If the pattern needs a primitive that doesn't exist, see §4.2. If the primitive is private to this entry only, attach it via `customPatterns`:
+   ```json
    {
-       Name:    "MyVendor Format",
-       Pattern: `%{MYVENDOR_TS:timestamp} %{GREEDYDATA:message}`,
-       CustomPatterns: map[string]string{
-           "MYVENDOR_TS": `\d{4}\.\d{3}T\d{2}:\d{2}:\d{2}`,
-       },
+     "name": "MyVendor Format",
+     "pattern": "%{MYVENDOR_TS:timestamp} %{GREEDYDATA:message}",
+     "priority": 80,
+     "specificity": 85,
+     "customPatterns": {
+       "MYVENDOR_TS": "\\d{4}\\.\\d{3}T\\d{2}:\\d{2}:\\d{2}"
+     }
    }
    ```
 
-5. Pick the right slice:
-   - `KnownPatternsGolden` — needs to win exactly against generic catchalls; gold-test corpus depends on it.
-   - `KnownPatternsCurated` — broad source family, may be replaced if a more specific one shows up.
-   - `KnownPatternsCatchall` — last-ditch generic shape.
+5. Order in the JSON file matters only for dedup tie-breaking — when two entries normalize to the same regex + field-name set, the first one wins. Otherwise the runtime sort by `priority`/`specificity` decides matching order.
 
 6. Add a corpus case (§5) to lock in behaviour.
 
 ### 4.2 New Primitive
 
-Edit `internal/pattern/primitives.go`. The `GrokPrimitives` map literal is the override layer — entries here win over anything loaded from bundled packs. Keep regex RE2-safe (no lookaround, no backrefs, no possessive quantifiers).
+Edit `internal/pattern/embedded/primitives.json`. This is the only primitive table — it's the sole input to `CompileGrok` for `%{NAME}` lookup. Keep regex RE2-safe (no lookaround, no backrefs, no possessive quantifiers).
 
 Test impact: extending `LOGLEVEL` or `TIMESTAMP_ISO8601` *broadens* what every dependent pattern matches. Run `make bench` before/after.
 
@@ -135,10 +137,6 @@ Edit `internal/pattern/identify.go`. Add a `structuredProbe{Name, Likely, Render
 `Likely` should be cheap. `Render` returns `(grok, source, ok)`. If `Render` returns `ok=false`, the probe is skipped.
 
 Use this lever when the format is **schema-driven** (header line, key-value, fixed delimiter) — not when it's "yet another regex."
-
-### 4.4 Bundled Packs
-
-`internal/pattern/packs_embedded.go` contains snapshots of upstream Logstash / vjeantet pattern packs. Don't hand-edit — these are regenerated. To promote one of their entries to a top-level library candidate, add to `topLevelByPack` in `bundle.go`. Specificity stays low so curated entries win on ties.
 
 ## 5. Golden Test Corpus
 
@@ -179,12 +177,14 @@ Cases are committed source-of-truth. Edit them directly — no generator. A hand
 | `pkg/log2grok/api.go` | Public API. Re-exports `Discover`, `CompileGrok`, `EvaluateCoverage`. |
 | `internal/pattern/discovery.go` | Stage orchestration. `DiscoveredPattern` definition. |
 | `internal/pattern/identify.go` | Structured probes (JSON, logfmt, CEF, W3C, CSV, TSV). |
-| `internal/pattern/library.go` | `KnownPattern` type, dedup, sort. |
-| `internal/pattern/library_curated.go` | Hand-curated library entries (`Curated`, `Golden`, `Catchall`). |
+| `internal/pattern/library.go` | `KnownPattern` type, dedup, sort, `composeKnownPatterns`. |
+| `internal/pattern/library_curated.go` | `KnownPatternsLibrary` declaration (loaded from `embedded/patterns.json`). |
 | `internal/pattern/score.go` | Sample-then-full scoring; `betterCandidate`. |
-| `internal/pattern/bundle.go` | Pack ingestion, `KnownPatterns` composition, PCRE→RE2 rewrites. |
-| `internal/pattern/primitives.go` | `GrokPrimitives` (override layer). |
-| `internal/pattern/packs_embedded.go` | Snapshots of Logstash / vjeantet packs (generated). |
+| `internal/pattern/embedded.go` | `//go:embed` of `embedded/*.json` + `RefreshLibrary`. |
+| `internal/pattern/embedded/patterns.json` | Single source-of-truth for built-in pattern entries. |
+| `internal/pattern/embedded/primitives.json` | Single source-of-truth for `GrokPrimitives`. |
+| `internal/pattern/config.go` | `LoadConfig`/`ResetConfig` — disk overlay seed/load/recover. |
+| `internal/pattern/primitives.go` | `GrokPrimitives` declaration (loaded from `embedded/primitives.json`). |
 | `internal/pattern/compile.go` | `CompileGrok` — `%{}` expansion + anchored RE2 compile. |
 | `internal/pattern/drain.go` | Drain3 wrapper, cluster→template extraction. |
 | `internal/pattern/classify.go` | Slot type inference (timestamp / IP / int / …). |
@@ -192,7 +192,7 @@ Cases are committed source-of-truth. Edit them directly — no generator. A hand
 | `internal/pattern/coverage.go` | `EvaluateCoverage` — anchored regex against full input. |
 | `test/benchmark/` | Golden corpus + benchmarks. |
 | `cmd/log2grok/` | CLI entrypoint. |
-| `cmd/buildpacks/` | Generates `packs_embedded.go` from upstream sources. |
+| `cmd/buildpacks/` | Library health-check stub (prints library/primitive counts). |
 
 ## 7. Common Failure Modes
 
@@ -211,7 +211,7 @@ Cases are committed source-of-truth. Edit them directly — no generator. A hand
 | `make bench` | Golden corpus correctness suite + per-case benchmarks. |
 | `make golden` | Just the curated golden tests. |
 | `make lint` | `go vet` + `gofmt` check. |
-| `make buildpacks` | Regenerate `packs_embedded.go` from upstream packs. |
+| `make buildpacks` | Library health-check (prints library/primitive counts; fails if the embedded library is broken). |
 
 ## 9. Decision Tree for New Format Requests
 

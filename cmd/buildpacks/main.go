@@ -1,9 +1,8 @@
-// Package main is the buildpacks generator entry point.
+// Package main is the library health-check entry point.
 //
-// In this implementation, bundled pattern packs are ingested at runtime in
-// internal/pattern/bundle.go via init(); there is no separate generation
-// step. This stub exists so `make buildpacks` runs successfully and so that
-// future hand-off to a code generator has a place to live.
+// It reports the size of the in-memory pattern library and any compile
+// diagnostics. Wired into `make buildpacks` / `make test` so a broken
+// embedded library fails the build early.
 package main
 
 import (
@@ -15,10 +14,9 @@ import (
 
 func main() {
 	diags := pattern.LibraryDiagnostics()
-	fmt.Printf("bundled packs: %d\n", len(pattern.BuiltinPatternPacks))
+	fmt.Printf("library entries: %d\n", len(pattern.KnownPatternsLibrary))
 	fmt.Printf("known patterns: %d\n", len(pattern.KnownPatterns))
-	fmt.Printf("primitives (override): %d\n", len(pattern.GrokPrimitives))
-	fmt.Printf("primitives (bundled): %d\n", len(pattern.GrokPrimitivesBundled))
+	fmt.Printf("primitives: %d\n", len(pattern.GrokPrimitives))
 	if len(diags) > 0 {
 		fmt.Fprintf(os.Stderr, "library diagnostics:\n")
 		for _, e := range diags {

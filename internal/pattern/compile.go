@@ -54,9 +54,6 @@ func expandGrok(s string, extras map[string]string, used map[string]int, depth i
 			body, ok = GrokPrimitives[name]
 		}
 		if !ok {
-			body, ok = GrokPrimitivesBundled[name]
-		}
-		if !ok {
 			if firstErr == nil {
 				firstErr = fmt.Errorf("unknown grok primitive %%{%s}", name)
 			}

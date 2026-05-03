@@ -14,10 +14,22 @@ type compiledPattern struct {
 }
 
 var (
+	compileMu       sync.Mutex
 	compileOnce     sync.Once
 	compiledLib     []compiledPattern
 	libraryDiagErrs []error
 )
+
+// resetCompiledLibrary clears the compiled-library cache so the next call
+// to compiledKnownPatterns rebuilds against the current KnownPatterns.
+// Called by RefreshLibrary after LoadConfig replaces the library contents.
+func resetCompiledLibrary() {
+	compileMu.Lock()
+	defer compileMu.Unlock()
+	compileOnce = sync.Once{}
+	compiledLib = nil
+	libraryDiagErrs = nil
+}
 
 // compiledKnownPatterns returns library entries that compiled cleanly.
 // Compile errors are recorded in libraryDiagErrs.
@@ -40,9 +52,8 @@ func compiledKnownPatterns() []compiledPattern {
 // LibraryDiagnostics returns library-compile errors (cumulative).
 func LibraryDiagnostics() []error {
 	compiledKnownPatterns()
-	out := make([]error, 0, len(libraryDiagErrs)+len(BundledLoadDiagnostics))
+	out := make([]error, 0, len(libraryDiagErrs))
 	out = append(out, libraryDiagErrs...)
-	out = append(out, BundledLoadDiagnostics...)
 	return out
 }
 

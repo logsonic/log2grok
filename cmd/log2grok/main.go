@@ -16,7 +16,22 @@ func main() {
 	maxLines := flag.Int("max-lines", 100000, "stop reading after this many lines (0 = unlimited)")
 	verbose := flag.Bool("verbose", false, "log diagnostics to stderr")
 	quiet := flag.Bool("quiet", false, "suppress trailing comment line on stdout")
+	configDir := flag.String("config-dir", "", "path to externalized pattern library (default: ./.log2grok)")
+	resetConfig := flag.Bool("reset-config", false, "back up and overwrite the externalized library with embedded defaults, then exit")
 	flag.Parse()
+
+	if *resetConfig {
+		if err := l2g.ResetConfig(*configDir, os.Stderr); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	if err := l2g.LoadConfig(*configDir, os.Stderr); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
 
 	if flag.NArg() != 1 {
 		fmt.Fprintln(os.Stderr, "usage: log2grok [flags] <input-file|->")

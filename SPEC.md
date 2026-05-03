@@ -1,7 +1,12 @@
 # Log2Grok CLI — Implementation Specification
 
-**Version:** 0.8 (CLI-only, broad-format optimized)
+**Version:** 0.9 (CLI-only, broad-format optimized)
 **Audience:** This spec is written for a junior Go engineer. It explains not just *what* to build but *why* each decision was made. If anything is unclear, the answer is in §17 (Glossary) or §18 (FAQ).
+
+### Changelog vs 0.8
+- §5/§8/§9: bundled pack ingestion (`packs_embedded.go`, `BuiltinPatternPacks`, `KnownPatternsBundled`, `GrokPrimitivesBundled`, the PCRE→RE2 conversion machinery) has been removed. `KnownPatterns` is now composed from a single `KnownPatternsLibrary` slice loaded verbatim from `internal/pattern/embedded/patterns.json`. Primitives load verbatim from `internal/pattern/embedded/primitives.json`. The previously-separated golden / curated / catchall tiers are now distinguished only by `Priority`.
+- §13: `TestBundledCoverage` is replaced by simpler library-presence assertions; `TestLibraryMatchesItsExample` no longer needs a bundled/required tiering.
+- §15/§16: `cmd/buildpacks` is now a library health-check stub; it prints library/primitive counts and surfaces library-compile diagnostics.
 
 ### Changelog vs 0.7
 - §3/§7: stages now carry a *best-so-far* result forward instead of dropping mid-coverage candidates. Hard thresholds become "auto-accept" gates rather than mandatory minima.
@@ -142,7 +147,7 @@ log2grok [flags] -            # read from stdin
 - **Exit codes**:
   - `0` — success (a pattern was produced).
   - `1` — usage error (bad flag, missing file, unreadable file, empty input, stdin attached to a TTY with no piped data).
-  - `2` — internal error (e.g. the bundled pack failed to load; should not occur in a released build).
+  - `2` — internal error (e.g. the embedded library failed to load; should not occur in a released build).
 
   Note vs 0.7: empty input now exits `1`, not `2`. There is *always* a fallback for non-empty input, so exit code `2` is reserved for genuine internal failure.
 
@@ -172,7 +177,7 @@ $ log2grok -verbose access.log
 log2grok/
 ├── cmd/
 │   ├── buildpacks/
-│   │   └── main.go              # Parses bundled pack snapshots and generates Go files.
+│   │   └── main.go              # Library health-check stub: prints library/primitive counts.
 │   └── log2grok/
 │       └── main.go              # Entry point: flag parsing, file reading, calls Discover, prints output.
 ├── pkg/
@@ -193,12 +198,11 @@ log2grok/
 │       ├── classify.go          # ClassifySlot(): used by drain.go.
 │       ├── render.go            # Render(): builds a Grok string from fields + sample line.
 │       ├── coverage.go          # EvaluateCoverage(): runs a regex against all lines.
-│       ├── packs_embedded.go    # Bundled standalone public pattern text snapshots.
-│       ├── library_bundled.go   # Generated from bundled pattern packs.
-│       ├── primitives_bundled.go # Generated primitive map from bundled packs.
-│       └── overrides/
-│           ├── known/           # Local known-pattern overlays.
-│           └── primitives/      # Local primitive overlays.
+│       ├── embedded.go          # //go:embed of embedded/*.json + RefreshLibrary.
+│       ├── config.go            # LoadConfig/ResetConfig — disk overlay seed/load/recover.
+│       └── embedded/
+│           ├── patterns.json    # Single source-of-truth for built-in pattern entries.
+│           └── primitives.json  # Single source-of-truth for GrokPrimitives.
 ├── testdata/
 │   └── golden/
 │       ├── nginx_access_combined/
@@ -777,67 +781,29 @@ Even with full bundled-pack ingestion, explicitly test this baseline catalog. A 
 | Generic structured | JSON object, logfmt, `key=value` pairs, CSV, TSV |
 | Generic text | ISO timestamp + level + logger + message, ISO timestamp + level + message, bracketed timestamp, syslog timestamp + message, bare level + message |
 
-### Bundled ingest contract
-The library implementation should include a loader/generator that reads bundled pattern text and emits compiled Go tables. Do not hand-maintain hundreds of entries.
+### Library data file
+The shipped library lives in `internal/pattern/embedded/patterns.json` as a single JSON array of `KnownPattern` objects. There is no longer any pack-ingestion step, no PCRE→RE2 rewriting, and no separate "bundled" tier — all entries live in one file with `priority` encoding their tier (golden ~1–4, curated ~10–199, catchall ~900–999). The file is `//go:embed`-ed into the binary at build time and decoded once at init. `LoadConfig(dir)` may replace it with a disk-resident copy under `~/.log2grok/patterns.json`.
 
 ```go
-// internal/pattern/packs_embedded.go
-package pattern
+// internal/pattern/embedded.go
+//go:embed embedded/primitives.json embedded/patterns.json
+var embeddedFS embed.FS
 
-type patternPack struct {
-    Name          string
-    Flavor        string // "ecs-v1", "legacy", "vjeantet", "fluentd"
-    PatternText   string // newline-separated "NAME REGEX" definitions
-}
-
-var BuiltinPatternPacks = []patternPack{
-    {
-        Name:   "logstash_ecs_v1",
-        Flavor: "ecs-v1",
-        PatternText: `
-IPORHOST (?:%{IP}|%{HOSTNAME})
-HTTPD_COMMONLOG %{IPORHOST:client_ip} %{USER:ident} %{USER:auth} \[%{HTTPDATE:timestamp}\] "%{WORD:method} %{NOTSPACE:url}(?: HTTP/%{NUMBER:http_version})?" %{INT:status} (?:%{INT:bytes}|-)
-HTTPD_COMBINEDLOG %{HTTPD_COMMONLOG} "%{DATA:referrer}" "%{DATA:user_agent}"
-HAPROXYHTTP %{IP:client_ip}:%{INT:client_port} \[%{HTTPDATE:timestamp}\] %{NOTSPACE:frontend_name} %{NOTSPACE:backend_name}/%{NOTSPACE:server_name} %{INT:tq}/%{INT:tw}/%{INT:tc}/%{INT:tr}/%{INT:tt} %{INT:status} %{INT:bytes_read} %{NOTSPACE:req_cookie} %{NOTSPACE:res_cookie} %{NOTSPACE:termination_state} %{INT:actconn}/%{INT:feconn}/%{INT:beconn}/%{INT:srvconn}/%{INT:retries} %{INT:srv_queue}/%{INT:backend_queue} "%{DATA:raw_request}"
-SYSLOGBASE %{SYSLOGTIMESTAMP:timestamp} %{SYSLOGHOST:hostname} %{PROG:program}(?:\[%{POSINT:pid}\])?:
-CISCOFW106001 %{SYSLOGBASE} access-list %{NOTSPACE:acl} %{WORD:action} %{WORD:protocol} %{NOTSPACE:src_interface}/%{IP:src_ip}\(%{INT:src_port}\) -> %{NOTSPACE:dst_interface}/%{IP:dst_ip}\(%{INT:dst_port}\)
-MONGO3_LOG %{TIMESTAMP_ISO8601:timestamp} \[%{DATA:component}\] %{GREEDYDATA:message}
-RAILS3 %{TIMESTAMP_ISO8601:timestamp} %{LOGLEVEL:level}\s+%{GREEDYDATA:message}
-REDISLOG %{INT:pid}:%{WORD:role} %{MONTHDAY} %{MONTH} %{YEAR} %{TIME} %{DATA:level} %{GREEDYDATA:message}
-`,
-    },
-    {
-        Name:   "vjeantet_core",
-        Flavor: "vjeantet",
-        PatternText: `
-AWSALB %{WORD:type} %{TIMESTAMP_ISO8601:timestamp} %{NOTSPACE:elb_name} %{IP:client_ip}:%{INT:client_port} (?:%{IP:target_ip}:%{INT:target_port}|-) %{NUMBER:req_time} %{NUMBER:target_time} %{NUMBER:resp_time} %{INT:elb_status} (?:%{INT:target_status}|-) %{INT:received_bytes} %{INT:sent_bytes} "%{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version}" "%{DATA:user_agent}" %{GREEDYDATA:tail}
-SQUID3 %{NUMBER:duration} %{IP:client_ip} %{WORD:cache_result}/%{INT:status} %{INT:bytes} %{WORD:method} %{NOTSPACE:url} %{NOTSPACE:user} %{NOTSPACE:hierarchy}/%{IPORHOST:server} %{NOTSPACE:content_type}
-BRO_CONN %{NUMBER:ts}\t%{NOTSPACE:uid}\t%{IP:orig_h}\t%{INT:orig_p}\t%{IP:resp_h}\t%{INT:resp_p}\t%{WORD:proto}\t%{GREEDYDATA:rest}
-JUNOSRT_FLOW %{MONTH} %{MONTHDAY} %{TIME} %{HOSTNAME:hostname} %{DATA:process}\[%{INT:pid}\]: %{GREEDYDATA:message}
-NAGIOSLOGLINE %{TIMESTAMP_ISO8601:timestamp}\s+\[%{WORD:facility}\]\s+%{GREEDYDATA:message}
-`,
-    },
+func loadEmbeddedDefaults() error {
+    GrokPrimitives, _      = decodePrimitives(mustReadEmbedded("primitives.json"))
+    KnownPatternsLibrary, _ = decodePatterns(mustReadEmbedded("patterns.json"))
+    return nil
 }
 ```
 
-The loader/generator must:
-1. Parse each `NAME REGEX` primitive definition.
-2. Build a primitive dependency graph.
-3. Convert unsupported constructs to RE2-safe equivalents (atomic groups → non-capturing; possessive quantifiers → standard; `(?<name>…)` → `(?P<name>…)`; `:type` modifiers preserved as-is — `CompileGrok` will accept and ignore them) or, if not convertible, drop the entry and record it in `BundledLoadDiagnostics`.
-4. Expand source-specific top-level patterns into `KnownPattern` entries.
-5. Deduplicate by `(normalizeForDedup(regex), sorted field-name set)` (see §8 final composition). The first occurrence wins.
-6. Emit `GrokPrimitivesBundled` and `KnownPatternsBundled`. Both must be deterministic across runs (sort by name).
-
 ### Representative entries
-Use these as style examples and local overrides. The real `KnownPatterns` shipped by the binary is composed in `init()` from three sources:
-- `KnownPatternsBundled` (all ingested bundled public patterns that compile under RE2),
-- `KnownPatternsCurated` (the curated overrides + source-specific examples below),
-- `KnownPatternsCatchall` (the generic timestamp/level fallbacks at the bottom of the table).
+Use these as style examples. Source-specific entries should appear before generic entries and should avoid `%{GREEDYDATA}` until the natural message tail.
 
-Source-specific entries should appear before generic entries and should avoid `%{GREEDYDATA}` until the natural message tail.
+The shapes below are shown as Go literals for readability; the actual entries are JSON objects with the same field names (lower-cased) inside `patterns.json`.
 
 ```go
-var KnownPatternsCurated = []KnownPattern{
+// Illustrative — actual data lives in internal/pattern/embedded/patterns.json
+var representativeEntries = []KnownPattern{
     // Web access logs
     {
         Name:        "Nginx Access Combined",
@@ -963,9 +929,10 @@ var KnownPatternsCurated = []KnownPattern{
     },
 }
 
-// KnownPatternsCatchall must remain last and low-specificity. These should
-// only win when nothing source-specific matched.
-var KnownPatternsCatchall = []KnownPattern{
+// Catchalls live at the tail of patterns.json with priority ~900–999. They
+// must remain last and low-specificity so they only win when nothing
+// source-specific matched.
+var representativeCatchalls = []KnownPattern{
     {
         Name:        "Generic ISO Timestamp Level Logger Message",
         Pattern:     `%{TIMESTAMP_ISO8601:timestamp}\s+%{LOGLEVEL:level}\s+%{NOTSPACE:logger}\s+%{GREEDYDATA:message}`,
@@ -987,18 +954,15 @@ var KnownPatternsCatchall = []KnownPattern{
 }
 ```
 
-Final composition (executed in `init()` because it's not a single expression):
+Final composition (called from `RefreshLibrary` after init or `LoadConfig`):
 
 ```go
 // internal/pattern/library.go
 var KnownPatterns []KnownPattern
 
-func init() {
-    KnownPatterns = make([]KnownPattern, 0,
-        len(KnownPatternsBundled)+len(KnownPatternsCurated)+len(KnownPatternsCatchall))
-    KnownPatterns = append(KnownPatterns, KnownPatternsBundled...)
-    KnownPatterns = append(KnownPatterns, KnownPatternsCurated...)
-    KnownPatterns = append(KnownPatterns, KnownPatternsCatchall...)
+func composeKnownPatterns() {
+    KnownPatterns = make([]KnownPattern, 0, len(KnownPatternsLibrary))
+    KnownPatterns = append(KnownPatterns, KnownPatternsLibrary...)
     KnownPatterns = dedupKnownPatterns(KnownPatterns)
     sortKnownPatterns(KnownPatterns)
 }
@@ -1019,10 +983,9 @@ func sortKnownPatterns(in []KnownPattern) {
 }
 
 // dedupKnownPatterns removes entries whose (normalized regex, sorted field
-// names) tuple matches an earlier entry. The earlier entry wins, so curated
-// overrides placed *after* bundled entries do NOT override them — to override
-// a bundled entry, ship the override in KnownPatternsCurated *and* delete the
-// bundled equivalent from the pack snapshot or rename the override.
+// names, customPatterns) tuple matches an earlier entry. The earlier entry
+// wins, so order inside patterns.json is the override mechanism: place the
+// preferred shape first.
 func dedupKnownPatterns(in []KnownPattern) []KnownPattern {
     seen := make(map[string]struct{}, len(in))
     out := make([]KnownPattern, 0, len(in))
@@ -1041,8 +1004,8 @@ func dedupKnownPatterns(in []KnownPattern) []KnownPattern {
 `normalizeForDedup` should collapse runs of whitespace, strip line anchors, and unify `(?<name>...)` vs `(?P<name>...)` forms. Field-name set is part of the key so that two regexes with the same skeleton but different capture names (one extracting more fields) survive as separate entries.
 
 ### Adding new entries
-Adding a new format should usually happen through bundled-pack ingestion, not manual editing. Keep entries sorted by `Priority`. Use `Specificity` to prevent generic catchalls from beating source-specific entries at similar coverage. Every new source gets:
-- A generated `KnownPattern` entry, or a local `KnownPatternsCurated` entry, or a structured probe.
+Adding a new format means adding a JSON object to `internal/pattern/embedded/patterns.json`. Pick a `priority` that puts it in the correct tier band and a `specificity` that beats generic catchalls when coverage ties. Every new source gets:
+- A `KnownPattern` JSON object in `patterns.json`, or a structured probe.
 - A sample file in `testdata/library_examples/<slug>.txt`.
 - A golden corpus if the format is common enough to regress accidentally.
 
@@ -1099,17 +1062,10 @@ Do not use ad hoc string parsing for JSON or CSV. Use `encoding/json` and `encod
 
 `%{IPV4}`, `%{NUMBER}`, etc. — these are the building blocks that library patterns reference. Every entry must compile under Go's RE2 (no PCRE features like atomic groups or backreferences).
 
-For broad public coverage, primitives should be layered:
-1. `GrokPrimitivesBundled`: generated from all bundled source packs.
-2. `GrokPrimitivesOverrides`: local fixes/aliases for RE2 and naming consistency.
-3. `GrokPrimitives`: merged effective table used by `CompileGrok`.
-
-Do not hand-edit generated primitive files.
+Primitives are loaded from the single source-of-truth file `internal/pattern/embedded/primitives.json`. There is no separate bundled or override layer — `GrokPrimitives` is exactly the contents of that file (or its on-disk overlay when `LoadConfig` is used). The Go example below illustrates the schema; the actual data is JSON.
 
 ```go
-// internal/pattern/primitives.go
-package pattern
-
+// Illustrative — actual data lives in internal/pattern/embedded/primitives.json
 var GrokPrimitives = map[string]string{
     // Generic text
     "WORD":              `\w+`,
@@ -1209,15 +1165,6 @@ var GrokPrimitives = map[string]string{
 ```
 
 A required test (§13) compiles every library entry against these primitives. If a library entry references a primitive that doesn't exist here, you'll find out in CI, not in production.
-
-Effective merge contract:
-
-```go
-var GrokPrimitives = mergePrimitives(
-    GrokPrimitivesBundled,   // all bundled public sources
-    GrokPrimitivesOverrides, // local RE2 and naming fixes
-)
-```
 
 ---
 
@@ -1828,20 +1775,16 @@ func TestLibraryCompiles(t *testing.T) {
 }
 ```
 
-### 13.2 `TestLibraryMatchesItsExample` — required examples for curated, opportunistic for bundled
-Curated entries (everything in `KnownPatternsCurated` and `KnownPatternsCatchall`) MUST ship with `testdata/library_examples/<slug>.txt`. Bundled entries (entries that come from `KnownPatternsBundled`) may ship one; if they do, the test runs against it; if they don't, that entry is skipped. This keeps the example-file count manageable for the 100s of bundled entries while still gating the curated catalog tightly.
+### 13.2 `TestLibraryMatchesItsExample` — every library entry has a sample that it matches
+Every entry in `KnownPatternsLibrary` MUST ship with `testdata/library_examples/<slug>.txt`. The test loads the sample and asserts the entry's regex matches every line of it.
 
 ```go
 func TestLibraryMatchesItsExample(t *testing.T) {
-    bundledNames := nameSetOf(KnownPatternsBundled)
     for _, kp := range KnownPatterns {
         t.Run(kp.Name, func(t *testing.T) {
             path := filepath.Join("testdata/library_examples", slug(kp.Name)+".txt")
             sample, err := os.ReadFile(path)
             if err != nil {
-                if bundledNames[kp.Name] {
-                    t.Skipf("no example file for bundled entry %s (optional)", kp.Name)
-                }
                 t.Fatalf("missing example file %s: %v", path, err)
             }
 
@@ -1861,21 +1804,13 @@ func TestLibraryMatchesItsExample(t *testing.T) {
 ### 13.2a `TestPublicModuleAPI` — importable from external test package
 Add a test under `test/benchmark` (or another non-`internal` folder) that imports `log2grok/pkg/log2grok` and calls `Discover`, `CompileGrok`, `EvaluateCoverage`, and `LibraryDiagnostics`. This prevents regressions where only internal APIs compile.
 
-### 13.2b `TestBundledCoverage` — all bundled packs contribute, anchored to named patterns
-Assert that the bundled output is non-empty *and* contains a fixed set of named patterns/primitives. Hard-coded count thresholds (`>= 200` etc.) are too brittle when the loader filters RE2-incompatible entries — anchor on patterns that the corpora rely on instead.
+### 13.2b `TestLibraryCoverage` — embedded library is non-empty and anchored to named patterns
+Assert that `KnownPatternsLibrary` (loaded from `embedded/patterns.json`) contains a fixed set of named patterns/primitives. Hard-coded count thresholds are too brittle — anchor on entries that the corpora rely on instead.
 
 ```go
-func TestBundledCoverage(t *testing.T) {
-    if len(BuiltinPatternPacks) == 0 {
-        t.Fatal("no bundled pattern packs configured")
-    }
-    for _, p := range BuiltinPatternPacks {
-        if strings.TrimSpace(p.PatternText) == "" {
-            t.Fatalf("pack %s has empty pattern text", p.Name)
-        }
-        if !bundledPackPresent(p.Name) {
-            t.Fatalf("pack %s missing in bundled output", p.Name)
-        }
+func TestLibraryCoverage(t *testing.T) {
+    if len(KnownPatternsLibrary) == 0 {
+        t.Fatal("KnownPatternsLibrary is empty — embedded library failed to load")
     }
 
     requiredPrimitives := []string{
@@ -1884,7 +1819,7 @@ func TestBundledCoverage(t *testing.T) {
     }
     for _, name := range requiredPrimitives {
         if _, ok := GrokPrimitives[name]; !ok {
-            t.Errorf("required primitive %q missing from merged GrokPrimitives", name)
+            t.Errorf("required primitive %q missing from GrokPrimitives", name)
         }
     }
 
@@ -2277,21 +2212,14 @@ Import `log2grok/pkg/log2grok`. Do not import `internal/pattern` from external s
 Read both carefully. If the pattern Discover produced is genuinely correct (it matches the input file with high coverage and extracts useful field names), update `expected.txt`. If Discover produced something worse than the expected pattern, fix the bug in Discover. The golden tests are the authoritative answer to "what should this look like" — but they're updated when the answer changes for good reasons.
 
 ### Q: How do I add a new library entry?
-1. Prefer adding it to bundled source packs so generation picks it up automatically.
-2. If it is project-specific, add a `KnownPattern{}` override in `internal/pattern/overrides/known/`.
-3. Pick a `Priority` that puts it in the right spot and a `Specificity` that beats generic catchalls when coverage ties.
+1. Add a `KnownPattern` JSON object to `internal/pattern/embedded/patterns.json`.
+2. Pick a `priority` that puts it in the right tier band and a `specificity` that beats generic catchalls when coverage ties.
+3. If the pattern needs a one-off primitive, attach it via `customPatterns`.
 4. Add a sample line in `testdata/library_examples/<slug>.txt`.
 5. Run `make test`. If `TestLibraryCompiles` and `TestLibraryMatchesItsExample` both pass, you're done.
 
-### Q: How do I add another public pattern source?
-1. Add its pattern text snapshot to `internal/pattern/packs/<name>.pattern`.
-2. Register the pack in `BuiltinPatternPacks` with `PatternText`.
-3. Update `cmd/buildpacks` parser rules if the source format differs.
-4. Run `make buildpacks`.
-5. Run `make test` and add/refresh golden corpora for impacted formats.
-
 ### Q: How do I add a new primitive?
-1. Add it to `GrokPrimitives` in `primitives.go`. Use only RE2-compatible regex.
+1. Add it to `internal/pattern/embedded/primitives.json`. Use only RE2-compatible regex.
 2. Done. `TestLibraryCompiles` will tell you if any library entry now references it incorrectly.
 
 ### Q: What if `Discover` returns the wrong pattern entirely?

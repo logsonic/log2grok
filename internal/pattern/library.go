@@ -8,17 +8,27 @@ import (
 
 // KnownPattern is one library entry.
 type KnownPattern struct {
-	Name           string
-	Pattern        string
-	Priority       int
-	Specificity    int
-	Description    string
-	CustomPatterns map[string]string
+	Name           string            `json:"name"`
+	Pattern        string            `json:"pattern"`
+	Priority       int               `json:"priority"`
+	Specificity    int               `json:"specificity"`
+	Description    string            `json:"description,omitempty"`
+	CustomPatterns map[string]string `json:"customPatterns,omitempty"`
 }
 
 // KnownPatterns is the merged, deduplicated, sorted library.
-// Populated in init() in bundle.go after bundled packs are ingested.
+// Populated by RefreshLibrary from KnownPatternsLibrary.
 var KnownPatterns []KnownPattern
+
+// composeKnownPatterns rebuilds KnownPatterns from KnownPatternsLibrary.
+// Dedup and sort are applied so the matcher sees a deterministic,
+// uniqued list.
+func composeKnownPatterns() {
+	KnownPatterns = make([]KnownPattern, 0, len(KnownPatternsLibrary))
+	KnownPatterns = append(KnownPatterns, KnownPatternsLibrary...)
+	KnownPatterns = dedupKnownPatterns(KnownPatterns)
+	sortKnownPatterns(KnownPatterns)
+}
 
 func sortKnownPatterns(in []KnownPattern) {
 	sort.SliceStable(in, func(i, j int) bool {
