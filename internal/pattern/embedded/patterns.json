@@ -7,43 +7,43 @@
   },
   {
     "name": "UFW Kernel",
-    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} kernel: \\[UFW %{WORD:action}\\] %{REST:details}",
+    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} kernel: \\[UFW %{WORD:action}\\] %{GREEDYDATA:details}",
     "priority": 1,
     "specificity": 99
   },
   {
     "name": "Iptables Kernel",
-    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} kernel: \\[%{NUMBER:uptime}\\] %{REST:iptables}",
+    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} kernel: \\[%{NUMBER:uptime}\\] %{GREEDYDATA:iptables}",
     "priority": 2,
     "specificity": 98
   },
   {
     "name": "Cassandra Log",
-    "pattern": "%{LOGLEVEL:level}\\s+\\[%{NOTSPACE:thread}\\]\\s+%{TIMESTAMP_ISO8601:timestamp}\\s+%{NOTSPACE:class}:%{INT:line}\\s+-\\s+%{REST:message}",
+    "pattern": "%{LOGLEVEL:level}\\s+\\[%{NOTSPACE:thread}\\]\\s+%{TIMESTAMP_ISO8601:timestamp}\\s+%{NOTSPACE:class}:%{INT:line}\\s+-\\s+%{GREEDYDATA:message}",
     "priority": 1,
     "specificity": 99
   },
   {
     "name": "Celery Log",
-    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp},000: %{LOGLEVEL:level}/%{NOTSPACE:process}\\] %{REST:message}",
+    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp},000: %{LOGLEVEL:level}/%{NOTSPACE:process}\\] %{GREEDYDATA:message}",
     "priority": 1,
     "specificity": 99
   },
   {
     "name": "Consul Log",
-    "pattern": "%{TIMESTAMP_ISO8601:timestamp} \\[%{LOGLEVEL:level}\\]\\s+agent: %{REST:message}",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} \\[%{LOGLEVEL:level}\\]\\s+agent: %{GREEDYDATA:message}",
     "priority": 1,
     "specificity": 99
   },
   {
     "name": "Cron Log",
-    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} CRON\\[%{POSINT:pid}\\]: %{REST:message}",
+    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} CRON\\[%{POSINT:pid}\\]: %{GREEDYDATA:message}",
     "priority": 1,
     "specificity": 99
   },
   {
     "name": "Django Error",
-    "pattern": "%{LOGLEVEL:level} %{TIMESTAMP_ISO8601:timestamp} %{NOTSPACE:module} %{REST:message}",
+    "pattern": "%{LOGLEVEL:level} %{TIMESTAMP_ISO8601:timestamp} %{NOTSPACE:module} %{GREEDYDATA:message}",
     "priority": 3,
     "specificity": 95
   },
@@ -55,13 +55,13 @@
   },
   {
     "name": "Docker Compose",
-    "pattern": "%{NOTSPACE:service}\\s+\\|\\s+\\[%{TIMESTAMP_ISO8601:timestamp}\\] %{LOGLEVEL:level} %{NOTSPACE:logger}: %{REST:message}",
+    "pattern": "%{NOTSPACE:service}\\s+\\|\\s+\\[%{TIMESTAMP_ISO8601:timestamp}\\] %{LOGLEVEL:level} %{NOTSPACE:logger}: %{GREEDYDATA:message}",
     "priority": 1,
     "specificity": 99
   },
   {
     "name": "Elasticsearch Strict",
-    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\]\\[%{LOGLEVEL:level}\\s*\\]\\[%{NOTSPACE:module}\\s*\\]\\s*\\[%{NOTSPACE:node}\\]\\s*%{REST:message}",
+    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\]\\[%{LOGLEVEL:level}\\s*\\]\\[%{NOTSPACE:module}\\s*\\]\\s*\\[%{NOTSPACE:node}\\]\\s*%{GREEDYDATA:message}",
     "priority": 1,
     "specificity": 99
   },
@@ -73,7 +73,7 @@
   },
   {
     "name": "Envoy Text Error",
-    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\]\\[%{INT:thread}\\]\\[%{LOGLEVEL:level}\\]\\[%{NOTSPACE:component}\\] %{REST:message}",
+    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\]\\[%{INT:thread}\\]\\[%{LOGLEVEL:level}\\]\\[%{NOTSPACE:component}\\] %{GREEDYDATA:message}",
     "priority": 1,
     "specificity": 99
   },
@@ -91,91 +91,91 @@
   },
   {
     "name": "Go Std Log",
-    "pattern": "%{YEAR}/%{MONTHNUM2}/%{MONTHDAY2} %{TIME:time} %{NOTSPACE:file}:%{INT:line}: %{REST:message}",
+    "pattern": "%{YEAR}/%{MONTHNUM2}/%{MONTHDAY2} %{TIME:time} %{NOTSPACE:file}:%{INT:line}: %{GREEDYDATA:message}",
     "priority": 1,
     "specificity": 99
   },
   {
     "name": "Gunicorn Error",
-    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\] \\[%{INT:pid}\\] \\[%{LOGLEVEL:level}\\] %{REST:message}",
+    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\] \\[%{INT:pid}\\] \\[%{LOGLEVEL:level}\\] %{GREEDYDATA:message}",
     "priority": 1,
     "specificity": 99
   },
   {
     "name": "Kafka Component",
-    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\]\\s+%{LOGLEVEL:level}\\s+\\[%{DATA:component}\\]\\s+%{REST:message}",
+    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\]\\s+%{LOGLEVEL:level}\\s+\\[%{DATA:component}\\]\\s+%{GREEDYDATA:message}",
     "priority": 1,
     "specificity": 99
   },
   {
     "name": "MySQL Error Strict",
-    "pattern": "%{TIMESTAMP_ISO8601:timestamp} %{INT:thread_id} \\[%{LOGLEVEL:level}\\] \\[%{NOTSPACE:error_code}\\] \\[%{WORD:component}\\] %{REST:message}",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} %{INT:thread_id} \\[%{LOGLEVEL:level}\\] \\[%{NOTSPACE:error_code}\\] \\[%{WORD:component}\\] %{GREEDYDATA:message}",
     "priority": 1,
     "specificity": 99
   },
   {
     "name": "NATS Log",
-    "pattern": "\\[%{INT:nats_seq}\\] %{YEAR}/%{MONTHNUM2}/%{MONTHDAY2} %{TIME:time} \\[%{LOGLEVEL:level}\\]\\s+%{IPORHOST:peer}:%{INT:peer_port}\\s+-\\s+cid:%{INT:client_id}\\s+-\\s+%{REST:message}",
+    "pattern": "\\[%{INT:nats_seq}\\] %{YEAR}/%{MONTHNUM2}/%{MONTHDAY2} %{TIME:time} \\[%{LOGLEVEL:level}\\]\\s+%{IPORHOST:peer}:%{INT:peer_port}\\s+-\\s+cid:%{INT:client_id}\\s+-\\s+%{GREEDYDATA:message}",
     "priority": 1,
     "specificity": 99
   },
   {
     "name": "Nomad Log",
-    "pattern": "%{TIMESTAMP_ISO8601:timestamp} \\[%{LOGLEVEL:level}\\]\\s+client\\.alloc_runner\\.task_runner: %{REST:message}",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} \\[%{LOGLEVEL:level}\\]\\s+client\\.alloc_runner\\.task_runner: %{GREEDYDATA:message}",
     "priority": 1,
     "specificity": 99
   },
   {
     "name": "PM2 Log",
-    "pattern": "%{INT:id}\\|%{NOTSPACE:app}\\s+\\|\\s+%{TIMESTAMP_ISO8601:timestamp}: %{REST:message}",
+    "pattern": "%{INT:id}\\|%{NOTSPACE:app}\\s+\\|\\s+%{TIMESTAMP_ISO8601:timestamp}: %{GREEDYDATA:message}",
     "priority": 1,
     "specificity": 99
   },
   {
     "name": "Python Bracket Log",
-    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\]\\s+\\[%{LOGLEVEL:level}\\]\\s+\\[%{NOTSPACE:logger}:%{INT:pid}\\]\\s+%{REST:message}",
+    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\]\\s+\\[%{LOGLEVEL:level}\\]\\s+\\[%{NOTSPACE:logger}:%{INT:pid}\\]\\s+%{GREEDYDATA:message}",
     "priority": 1,
     "specificity": 99
   },
   {
     "name": "RabbitMQ Log",
-    "pattern": "%{TIMESTAMP_ISO8601:timestamp} \\[%{LOGLEVEL:level}\\]\\s+<%{NOTSPACE:pid}>\\s+%{REST:message}",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} \\[%{LOGLEVEL:level}\\]\\s+<%{NOTSPACE:pid}>\\s+%{GREEDYDATA:message}",
     "priority": 1,
     "specificity": 99
   },
   {
     "name": "Rails Default",
-    "pattern": "%{WORD:level}, \\[%{TIMESTAMP_ISO8601:timestamp} #%{INT:pid}\\]\\s+%{LOGLEVEL:level2}\\s+--\\s+: %{REST:message}",
+    "pattern": "%{WORD:level}, \\[%{TIMESTAMP_ISO8601:timestamp} #%{INT:pid}\\]\\s+%{LOGLEVEL:level2}\\s+--\\s+: %{GREEDYDATA:message}",
     "priority": 1,
     "specificity": 99
   },
   {
     "name": "Serilog Text",
-    "pattern": "%{TIMESTAMP_ISO8601:timestamp} \\[%{LOGLEVEL:level}\\] %{REST:message}",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} \\[%{LOGLEVEL:level}\\] %{GREEDYDATA:message}",
     "priority": 4,
     "specificity": 88
   },
   {
     "name": "Snort Bracket Alert",
-    "pattern": "\\[\\*\\*\\]\\s+\\[%{NOTSPACE:gid}:%{NOTSPACE:sid}:\\d+\\]\\s+%{DATA:msg}\\s+\\[\\*\\*\\]\\s+\\[Classification: %{DATA:classification}\\]\\s+\\[Priority: %{INT:priority}\\]\\s+%{MONTHNUM2}/%{MONTHDAY2}-%{TIME:time}\\s+%{IP:src_ip}:%{INT:src_port}\\s+->\\s+%{IP:dst_ip}:%{INT:dst_port}\\s+%{REST:rest}",
+    "pattern": "\\[\\*\\*\\]\\s+\\[%{NOTSPACE:gid}:%{NOTSPACE:sid}:\\d+\\]\\s+%{DATA:msg}\\s+\\[\\*\\*\\]\\s+\\[Classification: %{DATA:classification}\\]\\s+\\[Priority: %{INT:priority}\\]\\s+%{MONTHNUM2}/%{MONTHDAY2}-%{TIME:time}\\s+%{IP:src_ip}:%{INT:src_port}\\s+->\\s+%{IP:dst_ip}:%{INT:dst_port}\\s+%{GREEDYDATA:rest}",
     "priority": 1,
     "specificity": 99
   },
   {
     "name": "Sudo Command",
-    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} sudo:\\s+%{NOTSPACE:user}\\s+:.*?USER=root\\s*;\\s*COMMAND=%{REST:command}",
+    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} sudo:\\s+%{NOTSPACE:user}\\s+:.*?USER=root\\s*;\\s*COMMAND=%{GREEDYDATA:command}",
     "priority": 1,
     "specificity": 99
   },
   {
     "name": "Tomcat Catalina Day",
-    "pattern": "%{MONTHDAY2}-%{MONTH}-%{YEAR} %{TIME:time} %{LOGLEVEL:level} \\[%{PROCID:thread}\\] %{REST:message}",
+    "pattern": "%{MONTHDAY2}-%{MONTH}-%{YEAR} %{TIME:time} %{LOGLEVEL:level} \\[%{PROCID:thread}\\] %{GREEDYDATA:message}",
     "priority": 1,
     "specificity": 99
   },
   {
     "name": "AWS S3 Access",
-    "pattern": "%{NOTSPACE:bucket_owner} %{NOTSPACE:bucket} \\[%{HTTPDATE:timestamp}\\] %{IP:client_ip} %{NOTSPACE:requester} %{NOTSPACE:request_id} %{PROCID:operation} %{NOTSPACE:key} \"(?:%{WORD:method} %{NOTSPACE:url}(?: HTTP/%{NUMBER:http_version})?|-)\" (?:%{INT:status}|-) (?:%{INT:error_code}|-) (?:%{INT:bytes_sent}|-) (?:%{INT:object_size}|-) (?:%{INT:request_time}|-) (?:%{INT:turnaround_time}|-) \"%{DATA:referrer}\" \"%{DATA:user_agent}\" %{REST:rest}",
+    "pattern": "%{NOTSPACE:bucket_owner} %{NOTSPACE:bucket} \\[%{HTTPDATE:timestamp}\\] %{IP:client_ip} %{NOTSPACE:requester} %{NOTSPACE:request_id} %{PROCID:operation} %{NOTSPACE:key} \"(?:%{WORD:method} %{NOTSPACE:url}(?: HTTP/%{NUMBER:http_version})?|-)\" (?:%{INT:status}|-) (?:%{INT:error_code}|-) (?:%{INT:bytes_sent}|-) (?:%{INT:object_size}|-) (?:%{INT:request_time}|-) (?:%{INT:turnaround_time}|-) \"%{DATA:referrer}\" \"%{DATA:user_agent}\" %{GREEDYDATA:rest}",
     "priority": 1,
     "specificity": 99
   },
@@ -193,7 +193,7 @@
   },
   {
     "name": "Nginx Error",
-    "pattern": "%{YEAR}/%{MONTHNUM}/%{MONTHDAY} %{TIME:time} \\[%{LOGLEVEL:level}\\] %{INT:pid}#%{INT:tid}: (?:\\*%{INT:connection} )?%{REST:message}",
+    "pattern": "%{YEAR}/%{MONTHNUM}/%{MONTHDAY} %{TIME:time} \\[%{LOGLEVEL:level}\\] %{INT:pid}#%{INT:tid}: (?:\\*%{INT:connection} )?%{GREEDYDATA:message}",
     "priority": 12,
     "specificity": 95
   },
@@ -217,9 +217,18 @@
   },
   {
     "name": "Apache Error",
-    "pattern": "\\[%{APACHE_ERROR_TIME:timestamp}\\] \\[%{DATA:module}:%{LOGLEVEL:level}\\](?: \\[pid %{INT:pid}(?::tid %{INT:tid})?\\])?(?: \\[client %{IPORHOST:client_ip}:%{INT:client_port}\\])? %{REST:message}",
+    "pattern": "\\[%{APACHE_ERROR_TIME:timestamp}\\] \\[%{DATA:module}:%{LOGLEVEL:level}\\](?: \\[pid %{INT:pid}(?::tid %{INT:tid})?\\])?(?: \\[client %{IPORHOST:client_ip}:%{INT:client_port}\\])? %{GREEDYDATA:message}",
     "priority": 14,
     "specificity": 95,
+    "customPatterns": {
+      "APACHE_ERROR_TIME": "[A-Za-z]{3} [A-Za-z]{3}\\s+\\d{1,2} %{TIME}(?:\\.\\d+)? \\d{4}"
+    }
+  },
+  {
+    "name": "Apache Classic Error",
+    "pattern": "\\[%{APACHE_ERROR_TIME:timestamp}\\] \\[%{LOGLEVEL:level}\\](?: \\[client %{IPORHOST:client_ip}(?::%{INT:client_port})?\\])? %{GREEDYDATA:message}",
+    "priority": 14,
+    "specificity": 93,
     "customPatterns": {
       "APACHE_ERROR_TIME": "[A-Za-z]{3} [A-Za-z]{3}\\s+\\d{1,2} %{TIME}(?:\\.\\d+)? \\d{4}"
     }
@@ -244,37 +253,40 @@
   },
   {
     "name": "Syslog RFC3164",
-    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} %{PROG:program}(?:\\[%{POSINT:pid}\\])?: %{REST:message}",
+    "pattern": "%{SYSLOGTIMESTAMP:timestamp}\\s+%{HOSTNAME:hostname}\\s+%{SYSLOGPROGNAME:program}(?:\\[%{NONNEGINT:pid}\\])?(?: \\(%{DATA:context}\\))?: %{GREEDYDATA:message}",
     "priority": 30,
-    "specificity": 75
+    "specificity": 75,
+    "customPatterns": {
+      "SYSLOGPROGNAME": "[A-Za-z0-9._/%() -]+"
+    }
   },
   {
     "name": "Syslog RFC5424",
-    "pattern": "<%{POSINT:priority}>%{NONNEGINT:version} %{TIMESTAMP_ISO8601:timestamp} %{HOSTNAME:hostname} %{NOTSPACE:app_name} %{NOTSPACE:proc_id} %{NOTSPACE:msg_id} (?:-|%{SYSLOG5424SD:structured_data}) ?%{REST:message}",
+    "pattern": "<%{POSINT:priority}>%{NONNEGINT:version} %{TIMESTAMP_ISO8601:timestamp} %{HOSTNAME:hostname} %{NOTSPACE:app_name} %{NOTSPACE:proc_id} %{NOTSPACE:msg_id} (?:-|%{SYSLOG5424SD:structured_data}) ?%{GREEDYDATA:message}",
     "priority": 31,
     "specificity": 90
   },
   {
     "name": "SSH Authentication",
-    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} sshd\\[%{POSINT:pid}\\]: %{REST:message}",
+    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} sshd\\[%{POSINT:pid}\\]: %{GREEDYDATA:message}",
     "priority": 32,
     "specificity": 95
   },
   {
     "name": "Sudo",
-    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} sudo(?:\\[%{POSINT:pid}\\])?: %{REST:message}",
+    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} sudo(?:\\[%{POSINT:pid}\\])?: %{GREEDYDATA:message}",
     "priority": 33,
     "specificity": 92
   },
   {
     "name": "Cron",
-    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} (?:cron|CROND)(?:\\[%{POSINT:pid}\\])?: %{REST:message}",
+    "pattern": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} (?:cron|CROND)(?:\\[%{POSINT:pid}\\])?: %{GREEDYDATA:message}",
     "priority": 34,
     "specificity": 90
   },
   {
     "name": "Auditd Key Value",
-    "pattern": "type=%{WORD:audit_type} msg=audit\\(%{NUMBER:audit_epoch}:%{INT:audit_id}\\): %{REST:kvpairs}",
+    "pattern": "type=%{WORD:audit_type} msg=audit\\(%{NUMBER:audit_epoch}:%{INT:audit_id}\\): %{GREEDYDATA:kvpairs}",
     "priority": 35,
     "specificity": 95
   },
@@ -310,31 +322,40 @@
   },
   {
     "name": "AWS VPC Flow Logs",
-    "pattern": "%{INT:version} %{NOTSPACE:account_id} %{NOTSPACE:interface_id} %{IP:src_addr} %{IP:dst_addr} %{INT:src_port} %{INT:dst_port} %{INT:protocol} %{INT:packets} %{INT:bytes} %{INT:start} %{INT:end} %{WORD:action} %{WORD:log_status}(?: %{REST:extra_fields})?",
+    "pattern": "%{INT:version} %{NOTSPACE:account_id} %{NOTSPACE:interface_id} %{IP:src_addr} %{IP:dst_addr} %{INT:src_port} %{INT:dst_port} %{INT:protocol} %{INT:packets} %{INT:bytes} %{INT:start} %{INT:end} %{WORD:action} %{WORD:log_status}(?: %{GREEDYDATA:extra_fields})?",
     "priority": 55,
     "specificity": 98
   },
   {
     "name": "CloudFront Standard",
-    "pattern": "%{DATE:date}\\t%{TIME:time}\\t%{NOTSPACE:edge_location}\\t%{INT:bytes}\\t%{IP:client_ip}\\t%{WORD:method}\\t%{NOTSPACE:host}\\t%{NOTSPACE:url}\\t%{INT:status}\\t%{NOTSPACE:referrer}\\t%{NOTSPACE:user_agent}\\t%{NOTSPACE:query_string}\\t%{NOTSPACE:cookie}\\t%{NOTSPACE:edge_result_type}\\t%{NOTSPACE:edge_request_id}\\t%{NOTSPACE:host_header}\\t%{NOTSPACE:protocol}\\t%{INT:cs_bytes}\\t%{NOTSPACE:time_taken}\\t%{REST:rest}",
+    "pattern": "%{DATE:date}\\t%{TIME:time}\\t%{NOTSPACE:edge_location}\\t%{INT:bytes}\\t%{IP:client_ip}\\t%{WORD:method}\\t%{NOTSPACE:host}\\t%{NOTSPACE:url}\\t%{INT:status}\\t%{NOTSPACE:referrer}\\t%{NOTSPACE:user_agent}\\t%{NOTSPACE:query_string}\\t%{NOTSPACE:cookie}\\t%{NOTSPACE:edge_result_type}\\t%{NOTSPACE:edge_request_id}\\t%{NOTSPACE:host_header}\\t%{NOTSPACE:protocol}\\t%{INT:cs_bytes}\\t%{NOTSPACE:time_taken}\\t%{GREEDYDATA:rest}",
     "priority": 56,
     "specificity": 96
   },
   {
     "name": "CRI Containerd",
-    "pattern": "%{TIMESTAMP_ISO8601:timestamp} %{WORD:stream} %{WORD:logtag} %{REST:message}",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} %{WORD:stream} %{WORD:logtag} %{GREEDYDATA:message}",
     "priority": 70,
     "specificity": 88
   },
   {
+    "name": "Docker Container",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{DOCKER_ID:container_id}\\s+%{NOTSPACE:container_name}\\s+%{GREEDYDATA:message}",
+    "priority": 72,
+    "specificity": 90,
+    "customPatterns": {
+      "DOCKER_ID": "[0-9a-f]{12,64}"
+    }
+  },
+  {
     "name": "Kubernetes Klog",
-    "pattern": "%{NOTSPACE:level_short}%{MONTHNUM2:month}%{MONTHDAY2:day} %{TIME:time}\\s+%{INT:thread_id} %{NOTSPACE:source_file}:%{INT:source_line}\\] %{REST:message}",
+    "pattern": "%{NOTSPACE:level_short}%{MONTHNUM2:month}%{MONTHDAY2:day} %{TIME:time}\\s+%{INT:thread_id} %{NOTSPACE:source_file}:%{INT:source_line}\\] %{GREEDYDATA:message}",
     "priority": 71,
     "specificity": 92
   },
   {
     "name": "Spring Boot Default",
-    "pattern": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+%{INT:pid}\\s+---\\s+\\[%{DATA:thread}\\]\\s+%{JAVACLASS:logger}\\s+:\\s+%{REST:message}",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+%{INT:pid}\\s+---\\s+\\[%{DATA:thread}\\]\\s+%{JAVACLASS:logger}\\s+:\\s+%{GREEDYDATA:message}",
     "priority": 80,
     "specificity": 96,
     "customPatterns": {
@@ -343,7 +364,7 @@
   },
   {
     "name": "Log4j Logback",
-    "pattern": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+\\[%{DATA:thread}\\]\\s+%{JAVACLASS:logger}\\s+-\\s+%{REST:message}",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+\\[%{DATA:thread}\\]\\s+%{JAVACLASS:logger}\\s+-\\s+%{GREEDYDATA:message}",
     "priority": 81,
     "specificity": 90,
     "customPatterns": {
@@ -352,7 +373,7 @@
   },
   {
     "name": "Tomcat Catalina",
-    "pattern": "%{MONTHNUM:month}-%{MONTHDAY:day}-%{YEAR:year} %{TIME:time} %{LOGLEVEL:level} \\[%{DATA:thread}\\] %{JAVACLASS:logger} - %{REST:message}",
+    "pattern": "%{MONTHNUM:month}-%{MONTHDAY:day}-%{YEAR:year} %{TIME:time} %{LOGLEVEL:level} \\[%{DATA:thread}\\] %{JAVACLASS:logger} - %{GREEDYDATA:message}",
     "priority": 82,
     "specificity": 90,
     "customPatterns": {
@@ -361,25 +382,25 @@
   },
   {
     "name": "Python Logging",
-    "pattern": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+%{NOTSPACE:logger}\\s+%{REST:message}",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+%{NOTSPACE:logger}\\s+%{GREEDYDATA:message}",
     "priority": 83,
     "specificity": 85
   },
   {
     "name": "Go Slog Text",
-    "pattern": "time=%{TIMESTAMP_ISO8601:timestamp} level=%{LOGLEVEL:level} msg=%{QUOTEDSTRING:message}(?: %{REST:kvpairs})?",
+    "pattern": "time=%{TIMESTAMP_ISO8601:timestamp} level=%{LOGLEVEL:level} msg=%{QUOTEDSTRING:message}(?: %{GREEDYDATA:kvpairs})?",
     "priority": 84,
     "specificity": 92
   },
   {
     "name": "Winston Text",
-    "pattern": "(?:%{TIMESTAMP_ISO8601:timestamp}\\s+)?%{LOGLEVEL:level}:\\s+%{REST:message}",
+    "pattern": "(?:%{TIMESTAMP_ISO8601:timestamp}\\s+)?%{LOGLEVEL:level}:\\s+%{GREEDYDATA:message}",
     "priority": 84,
     "specificity": 82
   },
   {
     "name": "Zap Console",
-    "pattern": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+%{NOTSPACE:logger}\\s+%{REST:message}",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+%{NOTSPACE:logger}\\s+%{GREEDYDATA:message}",
     "priority": 84,
     "specificity": 86
   },
@@ -391,25 +412,25 @@
   },
   {
     "name": "Rails",
-    "pattern": "%{TIMESTAMP_ISO8601:timestamp} %{LOGLEVEL:level}\\s+%{REST:message}",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} %{LOGLEVEL:level}\\s+%{GREEDYDATA:message}",
     "priority": 86,
     "specificity": 70
   },
   {
     "name": "PostgreSQL",
-    "pattern": "%{TIMESTAMP_ISO8601:timestamp}(?: %{TZ:timezone})? \\[%{POSINT:pid}\\](?: %{DATA:user_db})? %{LOGLEVEL:level}:\\s+%{REST:message}",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp}(?: %{TZ:timezone})? \\[%{POSINT:pid}\\](?: %{DATA:user_db})? %{LOGLEVEL:level}:\\s+%{GREEDYDATA:message}",
     "priority": 110,
     "specificity": 92
   },
   {
     "name": "MySQL Error",
-    "pattern": "%{TIMESTAMP_ISO8601:timestamp} %{INT:thread_id} \\[%{LOGLEVEL:level}\\] %{REST:message}",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} %{INT:thread_id} \\[%{LOGLEVEL:level}\\] %{GREEDYDATA:message}",
     "priority": 111,
     "specificity": 90
   },
   {
     "name": "Redis",
-    "pattern": "%{INT:pid}:%{WORD:role} %{MONTHDAY:day} %{MONTH:month} %{YEAR:year} %{TIME:time} %{REDISLEVEL:level} %{REST:message}",
+    "pattern": "%{INT:pid}:%{WORD:role} %{MONTHDAY:day} %{MONTH:month} %{YEAR:year} %{TIME:time} %{REDISLEVEL:level} %{GREEDYDATA:message}",
     "priority": 112,
     "specificity": 90,
     "customPatterns": {
@@ -418,25 +439,25 @@
   },
   {
     "name": "Redis Log Bracketed",
-    "pattern": "\\[%{POSINT:pid}\\] %{MONTHDAY:day} %{MONTH:month} %{TIME:time} \\* %{REST:message}",
+    "pattern": "\\[%{POSINT:pid}\\] %{MONTHDAY:day} %{MONTH:month} %{TIME:time} \\* %{GREEDYDATA:message}",
     "priority": 112,
     "specificity": 88
   },
   {
     "name": "MongoDB Text",
-    "pattern": "%{TIMESTAMP_ISO8601:timestamp} %{WORD:severity} %{WORD:component}\\s+\\[%{DATA:context}\\] %{REST:message}",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} %{WORD:severity} %{WORD:component}\\s+\\[%{DATA:context}\\] %{GREEDYDATA:message}",
     "priority": 113,
     "specificity": 92
   },
   {
     "name": "MongoDB 3 Log",
-    "pattern": "%{TIMESTAMP_ISO8601:timestamp} \\[%{DATA:component}\\] %{REST:message}",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} \\[%{DATA:component}\\] %{GREEDYDATA:message}",
     "priority": 113,
     "specificity": 88
   },
   {
     "name": "Kafka",
-    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\] %{LOGLEVEL:level} %{REST:message} \\(%{JAVACLASS:logger}\\)",
+    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\] %{LOGLEVEL:level} %{GREEDYDATA:message} \\(%{JAVACLASS:logger}\\)",
     "priority": 130,
     "specificity": 90,
     "customPatterns": {
@@ -445,19 +466,19 @@
   },
   {
     "name": "Elasticsearch",
-    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\]\\[%{LOGLEVEL:level}\\s*\\]\\[%{DATA:component}\\] %{REST:message}",
+    "pattern": "\\[%{TIMESTAMP_ISO8601:timestamp}\\]\\[%{LOGLEVEL:level}\\s*\\]\\[%{DATA:component}\\] %{GREEDYDATA:message}",
     "priority": 131,
     "specificity": 92
   },
   {
     "name": "ZooKeeper",
-    "pattern": "%{TIMESTAMP_ISO8601:timestamp} \\[myid:?(?:%{INT:myid})?\\] - %{LOGLEVEL:level}\\s+\\[%{DATA:thread}\\] - %{REST:message}",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp}(?: \\[myid:?(?:%{INT:myid})?\\])? - %{LOGLEVEL:level}\\s+\\[%{DATA:thread}\\] - %{GREEDYDATA:message}",
     "priority": 132,
     "specificity": 92
   },
   {
     "name": "Nagios Log Line",
-    "pattern": "%{TIMESTAMP_ISO8601:timestamp}\\s+\\[%{WORD:facility}\\]\\s+%{REST:message}",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp}\\s+\\[%{WORD:facility}\\]\\s+%{GREEDYDATA:message}",
     "priority": 140,
     "specificity": 88
   },
@@ -475,7 +496,7 @@
   },
   {
     "name": "Cisco ASA",
-    "pattern": "%{SYSLOGTIMESTAMP:timestamp}(?: %{HOSTNAME:hostname})? %%{ASA_TAG:tag}: %{REST:message}",
+    "pattern": "%{SYSLOGTIMESTAMP:timestamp}(?: %{HOSTNAME:hostname})? %%{ASA_TAG:tag}: %{GREEDYDATA:message}",
     "priority": 152,
     "specificity": 92,
     "customPatterns": {
@@ -484,37 +505,74 @@
   },
   {
     "name": "Fortinet Key Value",
-    "pattern": "date=%{DATE:date} time=%{TIME:time} devname=%{NOTSPACE:devname} %{REST:kvpairs}",
+    "pattern": "date=%{DATE:date} time=%{TIME:time} devname=%{NOTSPACE:devname} %{GREEDYDATA:kvpairs}",
     "priority": 153,
     "specificity": 92
   },
   {
+    "name": "Hadoop",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp} %{LOGLEVEL:level} \\[%{DATA:thread}\\] %{JAVACLASS:logger}: %{GREEDYDATA:message}",
+    "priority": 82,
+    "specificity": 92,
+    "customPatterns": {
+      "JAVACLASS": "(?:[A-Za-z0-9_$]+\\.)*[A-Za-z0-9_$]+"
+    }
+  },
+  {
+    "name": "OpenStack Nova",
+    "pattern": "%{NOTSPACE:source_file} %{TIMESTAMP_ISO8601:timestamp} %{INT:pid} %{LOGLEVEL:level} %{NOTSPACE:logger}(?: \\[%{DATA:request_context}\\])? %{GREEDYDATA:message}",
+    "priority": 100,
+    "specificity": 94
+  },
+  {
+    "name": "HDFS",
+    "pattern": "%{HDFS_DATE:date} %{HDFS_TIME:time} %{INT:thread} %{LOGLEVEL:level} %{NOTSPACE:component}: %{GREEDYDATA:message}",
+    "priority": 101,
+    "specificity": 94,
+    "customPatterns": {
+      "HDFS_DATE": "\\d{6}",
+      "HDFS_TIME": "\\d{6}"
+    }
+  },
+  {
+    "name": "BGL Supercomputer",
+    "pattern": "(?:-|%{NOTSPACE:alert}) %{INT:unix_timestamp} %{NOTSPACE:date} %{NOTSPACE:location} %{NOTSPACE:bgl_timestamp} %{NOTSPACE:location_alt} %{WORD:component} %{WORD:subcomponent} %{LOGLEVEL:level} %{GREEDYDATA:message}",
+    "priority": 102,
+    "specificity": 95
+  },
+  {
+    "name": "HPC",
+    "pattern": "%{INT:log_id} %{NOTSPACE:node} %{NOTSPACE:component} %{NOTSPACE:state} %{INT:unix_timestamp} %{INT:flag} %{GREEDYDATA:message}",
+    "priority": 103,
+    "specificity": 90
+  },
+  {
     "name": "Generic ISO Timestamp Level Logger Message",
-    "pattern": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+%{NOTSPACE:logger}\\s+%{REST:message}",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+%{NOTSPACE:logger}\\s+%{GREEDYDATA:message}",
     "priority": 900,
     "specificity": 20
   },
   {
     "name": "Generic ISO Timestamp Level Message",
-    "pattern": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+%{REST:message}",
+    "pattern": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+%{GREEDYDATA:message}",
     "priority": 910,
     "specificity": 10
   },
   {
     "name": "Generic Date Time Program Level Message",
-    "pattern": "%{DATE:date} %{TIME:time} %{PROG:program}(?:\\[%{INT:pid}\\])?: %{LOGLEVEL:level}: %{REST:message}",
+    "pattern": "%{DATE:date} %{TIME:time} %{PROG:program}(?:\\[%{INT:pid}\\])?: %{LOGLEVEL:level}: %{GREEDYDATA:message}",
     "priority": 915,
     "specificity": 12
   },
   {
     "name": "Generic Bracketed Timestamp",
-    "pattern": "\\[?%{TIMESTAMP_ISO8601:timestamp}\\]?\\s+%{REST:message}",
+    "pattern": "\\[?%{TIMESTAMP_ISO8601:timestamp}\\]?\\s+%{GREEDYDATA:message}",
     "priority": 920,
     "specificity": 5
   },
   {
     "name": "Generic Syslog Timestamp Message",
-    "pattern": "%{SYSLOGTIMESTAMP:timestamp}\\s+%{REST:message}",
+    "pattern": "%{SYSLOGTIMESTAMP:timestamp}\\s+%{GREEDYDATA:message}",
     "priority": 930,
     "specificity": 4
   }

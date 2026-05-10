@@ -1,1 +1,1 @@
-%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} %{PROG:program}(?:\[%{POSINT:pid}\])?: %{GREEDYDATA:message}
+%{SYSLOGTIMESTAMP:timestamp}\s+%{HOSTNAME:hostname}\s+%{SYSLOGPROGNAME:program}(?:\[%{NONNEGINT:pid}\])?(?: \(%{DATA:context}\))?: %{GREEDYDATA:message}
