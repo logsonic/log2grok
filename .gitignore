@@ -1,2 +1,4 @@
 bin/**
 .log2grok/
+.DS_Store
+**/.DS_Store
