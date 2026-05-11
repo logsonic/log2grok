@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"runtime"
+	"time"
 
 	"github.com/logsonic/log2grok/internal/pattern"
 )
@@ -37,13 +39,21 @@ type DecoderOptions struct {
 // match Fields is the named-capture map (always non-nil so range loops
 // don't need to check for nil) and Error is empty. On a miss Matched is
 // false, Fields is nil, and Error carries a short human-readable reason.
+//
+// When SmartDecode is enabled, both Smart (the legacy comma-joined map
+// view) and Entities (the typed struct view) are populated together. The
+// map preserves wire-compat with callers that range over `_ipv4_addr`
+// etc.; the struct lets newer callers consume properly-typed slices
+// without re-parsing the comma-joined values. They are derived from the
+// same single scan — using one over the other has no perf difference.
 type LineResult struct {
-	Raw     string
-	Matched bool
-	Pattern string
-	Fields  map[string]string
-	Smart   map[string]string
-	Error   string
+	Raw      string
+	Matched  bool
+	Pattern  string
+	Fields   map[string]string
+	Smart    map[string]string
+	Entities SmartEntities
+	Error    string
 }
 
 // Decoder is a compiled, reusable parser for one PatternSpec. It is safe
@@ -57,6 +67,11 @@ type Decoder struct {
 	// per-line allocation that re.SubexpNames() would otherwise incur
 	// (the standard library returns a fresh slice on every call).
 	names []string
+	// hint is the timestamp hint inferred from the spec's Grok body
+	// once at construction time. Decode/DecodeReader don't use it
+	// directly; it's exposed via TimestampHint() so callers can decide
+	// whether to call ParseTimestamp on each LineResult.Fields.
+	hint TimestampHint
 }
 
 // ErrEmptyPattern is returned by NewDecoder when spec.Grok is blank.
@@ -79,6 +94,7 @@ func NewDecoder(spec PatternSpec, opts DecoderOptions) (*Decoder, error) {
 		opts:  opts,
 		re:    re,
 		names: re.SubexpNames(),
+		hint:  inferTimestampHint(spec.Grok),
 	}, nil
 }
 
@@ -87,6 +103,25 @@ func NewDecoder(spec PatternSpec, opts DecoderOptions) (*Decoder, error) {
 // the decoder.
 func (d *Decoder) Pattern() PatternSpec {
 	return d.spec
+}
+
+// TimestampHint returns the timestamp hint inferred from the spec's
+// Grok body at construction time. Use it with ParseTimestamp to
+// decode each LineResult.Fields into a time.Time without writing a
+// custom resolver. Returns the zero value when no recognised primitive
+// was present in the spec.
+func (d *Decoder) TimestampHint() TimestampHint {
+	return d.hint
+}
+
+// Timestamp is a convenience wrapper that combines TimestampHint with
+// ParseTimestamp for a single matched line. On a miss (line not parsed
+// or no usable hint) it returns ErrNoTimestamp.
+func (d *Decoder) Timestamp(r LineResult) (time.Time, error) {
+	if !r.Matched || len(r.Fields) == 0 {
+		return time.Time{}, ErrNoTimestamp
+	}
+	return ParseTimestamp(r.Fields, d.hint)
 }
 
 // Decode runs the compiled pattern across every line and returns one
@@ -99,6 +134,59 @@ func (d *Decoder) Decode(lines []string) []LineResult {
 	}
 	return out
 }
+
+// concurrentDecodeMinBatch is the smallest batch size that triggers
+// parallel decoding. Tuned empirically: regex matching is fast enough
+// that goroutine setup dominates below ~512 lines. Exposed as a
+// non-const so tests can lower it.
+var concurrentDecodeMinBatch = 512
+
+// DecodeConcurrent is Decode with worker-pool parallelism. It fans out
+// across `workers` goroutines (default: runtime.NumCPU()) and is
+// safe because *regexp.Regexp itself is goroutine-safe. The output
+// slice preserves input order — callers can correlate by index just
+// like Decode.
+//
+// For small batches (fewer than 512 lines) it falls back to serial
+// Decode because goroutine setup overhead exceeds the regex work.
+//
+// Callers that already have a hot path with high CPU pressure should
+// stick with Decode; DecodeConcurrent shines when ingest throughput is
+// the bottleneck and there are spare cores to use.
+func (d *Decoder) DecodeConcurrent(lines []string, workers int) []LineResult {
+	if len(lines) < concurrentDecodeMinBatch {
+		return d.Decode(lines)
+	}
+	if workers <= 0 {
+		workers = goNumCPU()
+	}
+	if workers > len(lines) {
+		workers = len(lines)
+	}
+	out := make([]LineResult, len(lines))
+	// Stripe by worker-id: worker w handles indices w, w+workers, w+2*workers, …
+	// This avoids contention on a shared counter and keeps cache lines
+	// independent (each worker writes a disjoint stride).
+	done := make(chan struct{}, workers)
+	for w := 0; w < workers; w++ {
+		w := w
+		go func() {
+			for i := w; i < len(lines); i += workers {
+				out[i] = d.decodeOne(lines[i])
+			}
+			done <- struct{}{}
+		}()
+	}
+	for w := 0; w < workers; w++ {
+		<-done
+	}
+	return out
+}
+
+// goNumCPU returns runtime.NumCPU, factored out as a var so tests can
+// override. We avoid pulling in the runtime import directly here so
+// the production path stays explicit.
+var goNumCPU = func() int { return runtime.NumCPU() }
 
 // DecodeReader streams lines from r through the decoder, invoking cb for
 // each result. Returns the running totals of matched and failed lines
@@ -162,9 +250,11 @@ func (d *Decoder) decodeOne(line string) LineResult {
 	res.Fields = fields
 
 	if d.opts.SmartDecode {
-		if sm := smartDecode(line); sm != nil {
+		sm, ents := smartDecode(line)
+		if sm != nil {
 			res.Smart = sm
 		}
+		res.Entities = ents
 	}
 	return res
 }

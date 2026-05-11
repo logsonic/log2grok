@@ -370,6 +370,65 @@ func tryLibrary(sample, all []string, threshold float64, diag io.Writer) *Discov
 	}
 }
 
+// DiscoverTopK returns the top K library candidates plus, when
+// available, a structured candidate and the drain candidate. It is a
+// lighter-weight cousin of Discover: useful for UIs that want to
+// surface "the top 3 patterns matching this log" instead of a single
+// answer. Patterns are returned in descending preference order using
+// the same comparator as the single-pattern stage.
+//
+// When K <= 0 the function uses a default of 5. The returned slice
+// will have at most K entries and may be shorter (or empty if no
+// library entry produced any match against the sample).
+func DiscoverTopK(lines []string, k int, opts Options) ([]*DiscoveredPattern, error) {
+	if k <= 0 {
+		k = 5
+	}
+	considered, truncated := limitLines(lines, opts.MaxLines)
+	normalized := normalizeLines(considered)
+	if len(normalized.MatchLines) == 0 {
+		return nil, ErrEmptyInput
+	}
+
+	sample := chooseSample(normalized.MatchLines, 4096)
+
+	// Score every library pattern on the sample, then re-evaluate the
+	// top 24 on the full input. We keep more candidates than the
+	// single-best path (which uses 12) so the API can surface up to ~10
+	// distinct shapes when K is large.
+	candidates := scoreLibraryOnSample(sample)
+	candidates = keepTopCandidates(candidates, 24)
+
+	out := make([]*DiscoveredPattern, 0, k)
+	for _, c := range candidates {
+		matched := EvaluateCoverage(c.Compiled, normalized.MatchLines)
+		if matched == 0 {
+			continue
+		}
+		dp := &DiscoveredPattern{
+			Source:         "library:" + c.Pattern.Name,
+			SourceFamily:   "library",
+			Grok:           c.Pattern.Pattern,
+			Coverage:       ratio(matched, len(normalized.MatchLines)),
+			MatchedCount:   matched,
+			TotalLines:     len(normalized.MatchLines),
+			CustomPatterns: c.Pattern.CustomPatterns,
+		}
+		out = append(out, markTruncated(dp, truncated))
+		if len(out) >= k {
+			break
+		}
+	}
+
+	// If the library was thin, top up with a structured candidate.
+	if len(out) < k {
+		if s := tryStructured(sample, normalized.MatchLines, io.Discard); s != nil {
+			out = append(out, markTruncated(s, truncated))
+		}
+	}
+	return out, nil
+}
+
 func deriveFromDrain(lines []string, diag io.Writer) (*DiscoveredPattern, error) {
 	clusters, err := trainDrain(lines)
 	if err != nil {

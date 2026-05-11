@@ -13,6 +13,13 @@ import (
 )
 
 // DiscoveredPattern is what Discover returns. ONE per call. Not a list.
+//
+// TimestampHint is auto-derived from the chosen Grok body. It points at
+// whichever capture (and Go time layout) is most likely to hold the
+// line's wall-clock time. Callers can pass it to ParseTimestamp with a
+// LineResult.Fields map to avoid hand-rolling a resolver. The hint is
+// best-effort: zero-value when no recognized primitive is present,
+// MultiField-only when a SYSLOG-style split is detected.
 type DiscoveredPattern struct {
 	Source         string
 	SourceFamily   string
@@ -23,6 +30,7 @@ type DiscoveredPattern struct {
 	SampleLine     string
 	Truncated      bool
 	CustomPatterns map[string]string
+	TimestampHint  TimestampHint
 }
 
 // Options controls Discover's behavior.
@@ -58,7 +66,7 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 		}
 		return nil, err
 	}
-	return &DiscoveredPattern{
+	out := &DiscoveredPattern{
 		Source:         dp.Source,
 		SourceFamily:   dp.SourceFamily,
 		Grok:           dp.Grok,
@@ -68,7 +76,57 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 		SampleLine:     dp.SampleLine,
 		Truncated:      dp.Truncated,
 		CustomPatterns: dp.CustomPatterns,
-	}, nil
+	}
+	out.TimestampHint = inferTimestampHint(out.Grok)
+	return out, nil
+}
+
+// DiscoverTopK returns up to k candidate patterns ranked by match
+// count → typed captures → specificity. Useful for UIs that want to
+// surface alternatives ("did you mean Nginx Combined or Nginx Common?")
+// instead of a single committed answer. Candidates with zero matches
+// are dropped. When the library stage produces fewer than k candidates,
+// a structured probe is appended if it matched anything.
+//
+// Each DiscoveredPattern in the result has its TimestampHint populated
+// the same way Discover does. K <= 0 defaults to 5.
+func DiscoverTopK(lines []string, k int, opts Options) ([]*DiscoveredPattern, error) {
+	internalOpts := pattern.Options{
+		LibraryThreshold: opts.LibraryThreshold,
+		MaxLines:         opts.MaxLines,
+		Verbose:          opts.Verbose,
+		Diagnostics:      opts.Diagnostics,
+	}
+	if len(lines) == 0 {
+		return nil, errors.New("log2grok: no input lines")
+	}
+	if len(lines) > 100000 {
+		return nil, errors.New("log2grok: input lines too long, max is 100000")
+	}
+	dps, err := pattern.DiscoverTopK(lines, k, internalOpts)
+	if err != nil {
+		if errors.Is(err, pattern.ErrEmptyInput) {
+			return nil, ErrEmptyInput
+		}
+		return nil, err
+	}
+	out := make([]*DiscoveredPattern, 0, len(dps))
+	for _, dp := range dps {
+		entry := &DiscoveredPattern{
+			Source:         dp.Source,
+			SourceFamily:   dp.SourceFamily,
+			Grok:           dp.Grok,
+			Coverage:       dp.Coverage,
+			MatchedCount:   dp.MatchedCount,
+			TotalLines:     dp.TotalLines,
+			SampleLine:     dp.SampleLine,
+			Truncated:      dp.Truncated,
+			CustomPatterns: dp.CustomPatterns,
+		}
+		entry.TimestampHint = inferTimestampHint(entry.Grok)
+		out = append(out, entry)
+	}
+	return out, nil
 }
 
 // CompileGrok expands all %{NAME}, %{NAME:field}, and %{NAME:field:type}
