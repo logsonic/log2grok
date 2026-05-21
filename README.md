@@ -65,11 +65,58 @@ func main() {
 }
 ```
 
-Exported surface: `Discover`, `Options`, `DiscoveredPattern`, `CompileGrok`,
-`EvaluateCoverage`, `LibraryDiagnostics`, `LoadConfig`, `ResetConfig`,
-`DefaultConfigDirName`, `ErrEmptyInput`. The `internal/pattern` package is
-intentionally not importable per Go's [`internal/`](https://go.dev/ref/spec#Package_paths)
+Exported surface: `Discover`, `DiscoverMulti`, `DiscoverTopK`, `Options`,
+`DiscoveredPattern`, `MultiPatternResult`, `CompileGrok`, `EvaluateCoverage`,
+`LibraryDiagnostics`, `LoadConfig`, `ResetConfig`, `DefaultConfigDirName`,
+`ErrEmptyInput`. The `internal/pattern` package is intentionally not
+importable per Go's [`internal/`](https://go.dev/ref/spec#Package_paths)
 rule — `pkg/log2grok` is the stable API boundary.
+
+## Multi-format logs (`DiscoverMulti`)
+
+Some files mix shapes — application lines, access logs, and syslog all in
+one stream. A single Grok can't fit them. `DiscoverMulti` returns an
+ordered **set** of standalone patterns chosen by greedy set-cover so their
+combined coverage reaches a target (`Options.TargetCoverage`, default
+`0.90`):
+
+```sh
+$ log2grok --multi mixed.log
+%{IPORHOST:client_ip} %{USER:ident} %{USER:auth} \[%{HTTPDATE:timestamp}\] "%{WORD:method} %{NOTSPACE:url}(?: HTTP/%{NUMBER:http_version})?" %{INT:status} (?:%{INT:bytes}|-)
+\{\s*"ts"\s*:\s*%{QUOTEDSTRING:timestamp}\s*,\s*"level"\s*:\s*%{QUOTEDSTRING:level}\s*,\s*"msg"\s*:\s*%{QUOTEDSTRING:message}\s*\}
+# [1] 50.0% -- library:Apache Common
+# [2] 50.0% -- structured:Zap JSON
+# combined 1000000 / 1000000 lines (100.0%) across 2 patterns
+```
+
+Each pattern is an independent first-match-wins rule (the shape a
+Logstash/Vector grok list expects), ordered so the first explains the most
+lines and each subsequent one explains the most of what remained. How it
+works:
+
+- **Candidate pool** = specific library matches (named, vendor-recognized)
+  + a structured probe if one fits + every drain cluster rendered into its
+  own pattern. The library's generic catchall tier is excluded so a
+  "timestamp + GREEDYDATA" rule can't win by matching everything.
+- **Greedy selection** repeatedly takes the pattern explaining the most
+  still-uncovered lines, stopping when the target is met, when a pattern
+  would add less than ~1% (so an irreducible long tail of one-off lines
+  doesn't spawn a swarm of overfit patterns), or at 10 patterns.
+- `CombinedCoverage` reports what the set actually achieves — if the data
+  has, say, 20% unstructured noise, you get the major formats and an honest
+  80%, not ten throwaway rules chasing the target.
+
+```go
+res, err := l2g.DiscoverMulti(lines, l2g.Options{TargetCoverage: 0.90})
+for i, p := range res.Patterns {
+    fmt.Printf("[%d] %.1f%% %s\n    %s\n", i+1, p.Coverage*100, p.Source, p.Grok)
+}
+fmt.Printf("combined %.1f%%\n", res.CombinedCoverage*100)
+```
+
+`DiscoverMulti` shares the large-input sampling described below, so it
+handles 1M+ line multi-format files within the same bounded cost as
+`Discover`.
 
 ## Discovery Pipeline
 
@@ -79,7 +126,7 @@ rule — `pkg/log2grok` is the stable API boundary.
 |-------|--------|-----------------------|
 | 1. Structured | `tryStructured` — JSON / logfmt / CEF / W3C / CSV / TSV probes | `coverage ≥ LibraryThreshold` *and* a typed capture (skips the keyless JSON skeleton) |
 | 2. Library | `tryLibrary` — curated + bundled regex `KnownPatterns`, sample-then-full scoring | `coverage ≥ LibraryThreshold` (default `0.85`) |
-| 3. Drain | `deriveFromDrain` — drain3 clustering → token classifier → render | `coverage ≥ 0.85` |
+| 3. Drain | `deriveFromDrain` — drain3 clustering → token classifier → render. When the dominant cluster is a poor fit but the input is made of fewer than ~10 distinct shapes, the top clusters are unioned into one alternation (`drain:multi(N)`) | `coverage ≥ 0.85` |
 
 If no stage auto-accepts, `pickBetter` picks the best candidate across stages (matched count → typed-capture count → family rank `library < structured < drain < fallback`). If every stage produced zero matches, `deriveSafeFallback` returns a generic skeleton.
 
@@ -216,6 +263,38 @@ Properties:
 - **No mid-flight cancellation**: drain3 has no cancellation hook, so when structured or library auto-accepts, the drain goroutine still finishes its work in the background. Result channels are buffered (capacity 1), so unread goroutines exit cleanly without leaking.
 
 This shape replaced the previous strictly serial `stage1 → stage2 → stage3` short-circuit chain. The public API (`Discover`, `DiscoveredPattern`, `Options`) and selection semantics are unchanged — only the execution overlap changed.
+
+## Scaling to large inputs (1M+ lines)
+
+`Discover` accepts inputs of any size — there is no line-count cap. To keep
+cost bounded, the two stages whose work would otherwise grow with the input
+operate on a deterministic representative sample once the input crosses a
+threshold:
+
+- **Coverage estimation** (`coverageEvalCap`, 50k): each candidate regex is
+  scored against a fixed-size sample rather than every line. Because every
+  candidate is scored on the *same* sample, the relative ranking — and thus
+  the chosen pattern — is preserved.
+- **Drain training** (`drainTrainCap`, 20k): drain3 learns templates from a
+  bounded sample; templates converge well before this many lines, so feeding
+  more only grows memory and CPU.
+
+The sample is chosen deterministically (`chooseSample`: a fixed head plus a
+strided tail), so identical input always yields an identical result.
+
+When sampling is in effect, the result is flagged accordingly:
+
+| Field | Meaning |
+|-------|---------|
+| `Estimated` | `true` when coverage figures were extrapolated from a sample |
+| `EvalLines` | how many lines coverage was actually measured against |
+| `Coverage` | the sampled estimate of the true coverage ratio |
+| `MatchedCount` | `Coverage` extrapolated to `TotalLines` |
+| `Grok` | always exact — only the coverage *figures* are statistical |
+
+The net effect: a 1M-line file costs roughly the same as a 50k-line file in
+both time and allocations. Inputs at or below the caps take the exact,
+unsampled path and `Estimated` is `false`.
 
 ## Build & Test
 

@@ -2,3 +2,8 @@ bin/**
 .log2grok/
 .DS_Store
 **/.DS_Store
+
+# Go test & profiling artifacts
+*.test
+*.prof
+*.out

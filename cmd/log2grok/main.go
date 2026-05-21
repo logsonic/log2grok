@@ -13,11 +13,13 @@ import (
 
 func main() {
 	threshold := flag.Float64("threshold", 0.85, "library auto-accept threshold (0.0-1.0)")
-	maxLines := flag.Int("max-lines", 100000, "stop reading after this many lines (0 = unlimited)")
+	maxLines := flag.Int("max-lines", 0, "stop reading after this many lines (0 = unlimited; large inputs are sampled internally, so reading the whole file carries no accuracy penalty)")
 	verbose := flag.Bool("verbose", false, "log diagnostics to stderr")
 	quiet := flag.Bool("quiet", false, "suppress trailing comment line on stdout")
 	configDir := flag.String("config-dir", "", "path to externalized pattern library (default: ./.log2grok)")
 	resetConfig := flag.Bool("reset-config", false, "back up and overwrite the externalized library with embedded defaults, then exit")
+	multi := flag.Bool("multi", false, "for multi-format logs, emit a set of patterns whose combined coverage reaches --target")
+	target := flag.Float64("target", 0.90, "combined-coverage goal for --multi (0.0-1.0)")
 	flag.Parse()
 
 	if *resetConfig {
@@ -55,6 +57,19 @@ func main() {
 	if *verbose {
 		diag = os.Stderr
 	}
+
+	if *multi {
+		if err := runMulti(lines, *threshold, *target, *quiet, *verbose, diag); err != nil {
+			if errors.Is(err, l2g.ErrEmptyInput) {
+				fmt.Fprintln(os.Stderr, "error: input has no non-empty lines")
+				os.Exit(1)
+			}
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(2)
+		}
+		return
+	}
+
 	dp, err := discoverLines(lines, truncated, *threshold, *verbose, diag)
 	if err != nil {
 		if errors.Is(err, l2g.ErrEmptyInput) {
@@ -74,6 +89,33 @@ func main() {
 		fmt.Printf("# matched %d / %d lines (%.1f%%) -- %s%s\n",
 			dp.MatchedCount, dp.TotalLines, dp.Coverage*100, dp.Source, suffix)
 	}
+}
+
+// runMulti prints one Grok pattern per line for a multi-format input,
+// followed (unless quiet) by a per-pattern coverage comment and a combined
+// summary. The bare patterns come first so the output can be piped
+// straight into a tool that reads a grok list.
+func runMulti(lines []string, threshold, target float64, quiet, verbose bool, diag io.Writer) error {
+	res, err := l2g.DiscoverMulti(lines, l2g.Options{
+		LibraryThreshold: threshold,
+		TargetCoverage:   target,
+		Verbose:          verbose,
+		Diagnostics:      diag,
+	})
+	if err != nil {
+		return err
+	}
+	for _, p := range res.Patterns {
+		fmt.Println(p.Grok)
+	}
+	if !quiet {
+		for i, p := range res.Patterns {
+			fmt.Printf("# [%d] %.1f%% -- %s\n", i+1, p.Coverage*100, p.Source)
+		}
+		fmt.Printf("# combined %d / %d lines (%.1f%%) across %d patterns\n",
+			res.CombinedMatched, res.TotalLines, res.CombinedCoverage*100, len(res.Patterns))
+	}
+	return nil
 }
 
 func discoverLines(lines []string, truncated bool, threshold float64, verbose bool, diag io.Writer) (*l2g.DiscoveredPattern, error) {

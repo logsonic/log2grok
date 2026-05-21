@@ -5,10 +5,18 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 )
 
 // DiscoveredPattern is what Discover returns. ONE per call.
+//
+// For very large inputs (more lines than coverageEvalCap) the coverage
+// figures are computed against a deterministic representative sample
+// rather than every line: Estimated is then true, EvalLines reports how
+// many lines were actually matched against, and MatchedCount/Coverage are
+// statistical estimates extrapolated to TotalLines. For inputs at or
+// below the cap the figures are exact and Estimated is false.
 type DiscoveredPattern struct {
 	Source         string
 	SourceFamily   string
@@ -18,6 +26,8 @@ type DiscoveredPattern struct {
 	TotalLines     int
 	SampleLine     string
 	Truncated      bool
+	Estimated      bool
+	EvalLines      int
 	CustomPatterns map[string]string
 }
 
@@ -27,10 +37,33 @@ type Options struct {
 	MaxLines         int
 	Verbose          bool
 	Diagnostics      io.Writer
+	// TargetCoverage is the combined-coverage goal for DiscoverMulti
+	// (0 < t <= 1). Zero means use the default (0.90). Ignored by the
+	// single-pattern Discover.
+	TargetCoverage float64
 }
 
 // ErrEmptyInput is returned when the input has no non-empty lines.
 var ErrEmptyInput = errors.New("log2grok: no non-empty input lines")
+
+// Bounds that keep discovery cost independent of input size. Above these
+// line counts the heavy stages operate on a deterministic representative
+// sample (chooseSample) instead of every line, so a 1M-line file costs
+// roughly the same as a coverageEvalCap-line file. They are vars (not
+// consts) only so tests can lower them; production code never mutates
+// them.
+//
+//   - coverageEvalCap bounds how many lines each candidate regex is run
+//     against when estimating coverage. The estimate is unbiased because
+//     every candidate is scored on the *same* sample, so their relative
+//     ranking is preserved.
+//   - drainTrainCap bounds how many lines are fed to drain3 for template
+//     learning. Templates converge well before this many lines; feeding
+//     more only grows memory and CPU.
+var (
+	coverageEvalCap = 50000
+	drainTrainCap   = 20000
+)
 
 // Discover returns the single best Grok pattern for the input lines.
 func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
@@ -49,7 +82,24 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 		diag = io.Discard
 	}
 
-	sample := chooseSample(normalized.MatchLines, 4096)
+	full := normalized.MatchLines
+	total := len(full)
+
+	// evalSet is what coverage is measured against; drainSet is what drain
+	// trains on. For inputs at or below the caps these are the full slice
+	// and behavior is bit-for-bit identical to the unsampled path.
+	evalSet := full
+	estimated := false
+	if total > coverageEvalCap {
+		evalSet = chooseSample(full, coverageEvalCap)
+		estimated = true
+	}
+	drainSet := full
+	if total > drainTrainCap {
+		drainSet = chooseSample(full, drainTrainCap)
+	}
+
+	sample := chooseSample(full, 4096)
 
 	// All three stages run concurrently. Each writes its diagnostics to a
 	// per-stage buffer so the merged output preserves the historical
@@ -74,7 +124,7 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 	// it can't pre-empt the more informative library/drain stages.
 	go func() {
 		var buf bytes.Buffer
-		dp := tryStructured(sample, normalized.MatchLines, &buf)
+		dp := tryStructured(sample, evalSet, &buf)
 		accept := dp != nil && dp.Coverage >= threshold && structuredHasTypedCapture(dp)
 		if accept {
 			fmt.Fprintf(&buf, "stage1 structured auto-accept: %s coverage=%.3f\n", dp.Source, dp.Coverage)
@@ -86,7 +136,7 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 	// the top candidates re-evaluated against the full input.
 	go func() {
 		var buf bytes.Buffer
-		dp := tryLibrary(sample, normalized.MatchLines, threshold, &buf)
+		dp := tryLibrary(sample, evalSet, threshold, &buf)
 		accept := dp != nil && dp.Coverage >= threshold
 		if accept {
 			fmt.Fprintf(&buf, "stage2 library auto-accept: %s coverage=%.3f\n", dp.Source, dp.Coverage)
@@ -100,7 +150,7 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 	// even when a higher-priority stage has already auto-accepted.
 	go func() {
 		var buf bytes.Buffer
-		dp, err := deriveFromDrain(normalized.MatchLines, &buf)
+		dp, err := deriveFromDrain(drainSet, evalSet, &buf)
 		if err != nil {
 			fmt.Fprintf(&buf, "stage3 drain error: %v\n", err)
 			drainCh <- stageResult{diag: &buf}
@@ -119,19 +169,19 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 	structured := <-structuredCh
 	if structured.autoAccept {
 		flushDiag(diag, structured.diag)
-		return markTruncated(structured.candidate, truncated), nil
+		return finalize(structured.candidate, total, len(evalSet), estimated, truncated), nil
 	}
 
 	library := <-libraryCh
 	if library.autoAccept {
 		flushDiag(diag, structured.diag, library.diag)
-		return markTruncated(library.candidate, truncated), nil
+		return finalize(library.candidate, total, len(evalSet), estimated, truncated), nil
 	}
 
 	drain := <-drainCh
 	flushDiag(diag, structured.diag, library.diag, drain.diag)
 	if drain.autoAccept {
-		return markTruncated(drain.candidate, truncated), nil
+		return finalize(drain.candidate, total, len(evalSet), estimated, truncated), nil
 	}
 
 	var best *DiscoveredPattern
@@ -142,10 +192,28 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 	}
 
 	if best != nil && best.MatchedCount > 0 {
-		return markTruncated(best, truncated), nil
+		return finalize(best, total, len(evalSet), estimated, truncated), nil
 	}
 
-	return markTruncated(deriveSafeFallback(normalized.MatchLines), truncated), nil
+	return finalize(deriveSafeFallback(evalSet), total, len(evalSet), estimated, truncated), nil
+}
+
+// finalize stamps truncation, and—when coverage was measured against a
+// sample rather than the whole input—rescales the matched count to the
+// true total and flags the result as an estimate. Coverage (a ratio) is
+// already the sampled estimate of the true coverage, so it is preserved.
+func finalize(dp *DiscoveredPattern, total, evalLines int, estimated, truncated bool) *DiscoveredPattern {
+	if dp == nil {
+		return nil
+	}
+	dp.Truncated = truncated
+	dp.EvalLines = evalLines
+	if estimated {
+		dp.Estimated = true
+		dp.TotalLines = total
+		dp.MatchedCount = int(float64(total)*dp.Coverage + 0.5)
+	}
+	return dp
 }
 
 // stageResult carries one stage's outcome back to Discover. autoAccept
@@ -181,13 +249,6 @@ func limitLines(lines []string, max int) ([]string, bool) {
 		return lines[:max], true
 	}
 	return lines, false
-}
-
-func markTruncated(dp *DiscoveredPattern, truncated bool) *DiscoveredPattern {
-	if dp != nil {
-		dp.Truncated = truncated
-	}
-	return dp
 }
 
 // pickBetter compares two candidates by integer matched count, then typed
@@ -390,10 +451,19 @@ func DiscoverTopK(lines []string, k int, opts Options) ([]*DiscoveredPattern, er
 		return nil, ErrEmptyInput
 	}
 
-	sample := chooseSample(normalized.MatchLines, 4096)
+	full := normalized.MatchLines
+	total := len(full)
+	evalSet := full
+	estimated := false
+	if total > coverageEvalCap {
+		evalSet = chooseSample(full, coverageEvalCap)
+		estimated = true
+	}
+
+	sample := chooseSample(full, 4096)
 
 	// Score every library pattern on the sample, then re-evaluate the
-	// top 24 on the full input. We keep more candidates than the
+	// top 24 on the eval set. We keep more candidates than the
 	// single-best path (which uses 12) so the API can surface up to ~10
 	// distinct shapes when K is large.
 	candidates := scoreLibraryOnSample(sample)
@@ -401,7 +471,7 @@ func DiscoverTopK(lines []string, k int, opts Options) ([]*DiscoveredPattern, er
 
 	out := make([]*DiscoveredPattern, 0, k)
 	for _, c := range candidates {
-		matched := EvaluateCoverage(c.Compiled, normalized.MatchLines)
+		matched := EvaluateCoverage(c.Compiled, evalSet)
 		if matched == 0 {
 			continue
 		}
@@ -409,12 +479,12 @@ func DiscoverTopK(lines []string, k int, opts Options) ([]*DiscoveredPattern, er
 			Source:         "library:" + c.Pattern.Name,
 			SourceFamily:   "library",
 			Grok:           c.Pattern.Pattern,
-			Coverage:       ratio(matched, len(normalized.MatchLines)),
+			Coverage:       ratio(matched, len(evalSet)),
 			MatchedCount:   matched,
-			TotalLines:     len(normalized.MatchLines),
+			TotalLines:     len(evalSet),
 			CustomPatterns: c.Pattern.CustomPatterns,
 		}
-		out = append(out, markTruncated(dp, truncated))
+		out = append(out, finalize(dp, total, len(evalSet), estimated, truncated))
 		if len(out) >= k {
 			break
 		}
@@ -422,15 +492,20 @@ func DiscoverTopK(lines []string, k int, opts Options) ([]*DiscoveredPattern, er
 
 	// If the library was thin, top up with a structured candidate.
 	if len(out) < k {
-		if s := tryStructured(sample, normalized.MatchLines, io.Discard); s != nil {
-			out = append(out, markTruncated(s, truncated))
+		if s := tryStructured(sample, evalSet, io.Discard); s != nil {
+			out = append(out, finalize(s, total, len(evalSet), estimated, truncated))
 		}
 	}
 	return out, nil
 }
 
-func deriveFromDrain(lines []string, diag io.Writer) (*DiscoveredPattern, error) {
-	clusters, err := trainDrain(lines)
+// deriveFromDrain learns templates from trainLines (a bounded sample of
+// the input) and measures the resulting Grok against evalLines (the
+// coverage sample, which equals the full input when it is small enough).
+// Separating the two keeps drain3's clustering cost bounded on huge
+// inputs while still scoring coverage on a representative population.
+func deriveFromDrain(trainLines, evalLines []string, diag io.Writer) (*DiscoveredPattern, error) {
+	clusters, err := trainDrain(trainLines)
 	if err != nil {
 		return nil, err
 	}
@@ -438,11 +513,11 @@ func deriveFromDrain(lines []string, diag io.Writer) (*DiscoveredPattern, error)
 		return nil, errors.New("drain produced no clusters")
 	}
 	dominant := clusters[0]
-	if dominant.SampleLineIdx < 0 || dominant.SampleLineIdx >= len(lines) {
+	if dominant.SampleLineIdx < 0 || dominant.SampleLineIdx >= len(trainLines) {
 		return nil, errors.New("drain dominant cluster has no representative line")
 	}
-	sample := lines[dominant.SampleLineIdx]
-	slots := resolveSlots(dominant, lines)
+	sample := trainLines[dominant.SampleLineIdx]
+	slots := resolveSlots(dominant, trainLines)
 	fields := autoFieldsFromSlots(slots, sample, dominant)
 	grok := Render(sample, fields, slots)
 
@@ -450,13 +525,24 @@ func deriveFromDrain(lines []string, diag io.Writer) (*DiscoveredPattern, error)
 	if err != nil {
 		return nil, fmt.Errorf("rendered pattern failed to compile: %w", err)
 	}
-	matched := EvaluateCoverage(re, lines)
-	fmt.Fprintf(diag, "drain: cluster=%d matched=%d/%d\n", dominant.ID, matched, len(lines))
+	matched := EvaluateCoverage(re, evalLines)
+	cov := ratio(matched, len(evalLines))
+	fmt.Fprintf(diag, "drain: cluster=%d matched=%d/%d clusters=%d\n",
+		dominant.ID, matched, len(evalLines), len(clusters))
+
+	// When the dominant cluster alone leaves a lot of lines unmatched but
+	// the input is made of only a handful of distinct shapes, union the
+	// top clusters into a single alternation so multi-format logs are
+	// detected instead of collapsing to a generic fallback.
+	if cov < multiPatternMinCoverage && len(clusters) >= 2 {
+		if multi := deriveMultiPattern(clusters, trainLines, evalLines, cov, diag); multi != nil {
+			return multi, nil
+		}
+	}
 
 	// Reject severely overfit patterns: if Drain produced a pattern that
 	// matches fewer than ~20% of lines, it's almost certainly literal text
 	// that won't generalize. Fall through to fallback instead.
-	cov := ratio(matched, len(lines))
 	if cov < 0.20 {
 		fmt.Fprintf(diag, "drain: skipping overfit pattern (coverage %.3f < 0.20)\n", cov)
 		return nil, nil
@@ -468,9 +554,121 @@ func deriveFromDrain(lines []string, diag io.Writer) (*DiscoveredPattern, error)
 		Grok:         grok,
 		Coverage:     cov,
 		MatchedCount: matched,
-		TotalLines:   len(lines),
+		TotalLines:   len(evalLines),
 		SampleLine:   sample,
 	}, nil
+}
+
+// Multi-pattern tuning. These only take effect when the dominant drain
+// cluster is a poor fit for the whole input, so single-format logs (where
+// the dominant cluster already matches ~everything) never reach this code.
+var (
+	// multiPatternMinCoverage is the dominant-cluster coverage below which
+	// we consider unioning multiple clusters.
+	multiPatternMinCoverage = 0.85
+	// multiPatternMaxClusters bounds how many distinct shapes we treat as
+	// a "small number of patterns" worth unioning. The goal is files made
+	// of fewer than ~10 formats.
+	multiPatternMaxClusters = 10
+	// multiPatternMinGain is the absolute coverage improvement the union
+	// must deliver over the dominant cluster alone to be worth returning.
+	multiPatternMinGain = 0.15
+	// multiPatternMinCombined is the floor the unioned coverage must clear
+	// before we prefer it over the normal single-cluster / fallback path.
+	multiPatternMinCombined = 0.90
+)
+
+// deriveMultiPattern handles inputs composed of a small number (fewer than
+// multiPatternMaxClusters) of distinct line shapes. It renders each of the
+// top clusters into its own Grok body and greedily unions the branches
+// that add coverage into a single alternation, so multi-format logs are
+// detected as one combined pattern instead of collapsing to a generic
+// GREEDYDATA fallback. Returns nil (caller falls back to the dominant
+// handling) unless the union both clears multiPatternMinCombined coverage
+// and improves on the dominant cluster by at least multiPatternMinGain.
+func deriveMultiPattern(clusters []cluster, trainLines, evalLines []string, dominantCov float64, diag io.Writer) *DiscoveredPattern {
+	if len(clusters) < 2 || len(clusters) > multiPatternMaxClusters {
+		return nil
+	}
+
+	// Track which eval lines remain unmatched so each added branch is only
+	// credited for the new lines it explains.
+	remaining := make([]bool, len(evalLines))
+	for i := range remaining {
+		remaining[i] = true
+	}
+
+	type branch struct {
+		grok string
+		re   *regexp.Regexp
+	}
+	var branches []branch
+	for _, c := range clusters {
+		grok, ok := renderCluster(c, trainLines)
+		if !ok {
+			continue
+		}
+		re, err := CompileGrok(grok, nil)
+		if err != nil {
+			continue
+		}
+		gained := 0
+		for i, line := range evalLines {
+			if remaining[i] && re.MatchString(line) {
+				remaining[i] = false
+				gained++
+			}
+		}
+		if gained == 0 {
+			continue
+		}
+		branches = append(branches, branch{grok: grok, re: re})
+	}
+	if len(branches) < 2 {
+		return nil
+	}
+
+	parts := make([]string, 0, len(branches))
+	for _, b := range branches {
+		parts = append(parts, "(?:"+b.grok+")")
+	}
+	unionGrok := "(?:" + strings.Join(parts, "|") + ")"
+
+	unionRe, err := CompileGrok(unionGrok, nil)
+	if err != nil {
+		fmt.Fprintf(diag, "drain multi: union failed to compile: %v\n", err)
+		return nil
+	}
+	matched := EvaluateCoverage(unionRe, evalLines)
+	cov := ratio(matched, len(evalLines))
+	fmt.Fprintf(diag, "drain multi: branches=%d matched=%d/%d coverage=%.3f (dominant=%.3f)\n",
+		len(branches), matched, len(evalLines), cov, dominantCov)
+
+	if cov < multiPatternMinCombined || cov-dominantCov < multiPatternMinGain {
+		return nil
+	}
+	return &DiscoveredPattern{
+		Source:       fmt.Sprintf("drain:multi(%d)", len(branches)),
+		SourceFamily: "drain",
+		Grok:         unionGrok,
+		Coverage:     cov,
+		MatchedCount: matched,
+		TotalLines:   len(evalLines),
+		SampleLine:   trainLines[clusters[0].SampleLineIdx],
+	}
+}
+
+// renderCluster renders a single drain cluster into a Grok body using its
+// representative line. Returns ok=false when the cluster has no usable
+// representative line.
+func renderCluster(c cluster, trainLines []string) (string, bool) {
+	if c.SampleLineIdx < 0 || c.SampleLineIdx >= len(trainLines) {
+		return "", false
+	}
+	sample := trainLines[c.SampleLineIdx]
+	slots := resolveSlots(c, trainLines)
+	fields := autoFieldsFromSlots(slots, sample, c)
+	return Render(sample, fields, slots), true
 }
 
 func deriveSafeFallback(lines []string) *DiscoveredPattern {

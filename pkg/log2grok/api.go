@@ -20,6 +20,11 @@ import (
 // LineResult.Fields map to avoid hand-rolling a resolver. The hint is
 // best-effort: zero-value when no recognized primitive is present,
 // MultiField-only when a SYSLOG-style split is detected.
+// Estimated is true when the input was large enough (more than the
+// internal coverage cap) that Coverage and MatchedCount were extrapolated
+// from a representative sample of EvalLines lines rather than computed
+// against every line. The Grok pattern itself is always exact; only the
+// reported coverage figures are statistical when Estimated is true.
 type DiscoveredPattern struct {
 	Source         string
 	SourceFamily   string
@@ -29,6 +34,8 @@ type DiscoveredPattern struct {
 	TotalLines     int
 	SampleLine     string
 	Truncated      bool
+	Estimated      bool
+	EvalLines      int
 	CustomPatterns map[string]string
 	TimestampHint  TimestampHint
 }
@@ -39,6 +46,26 @@ type Options struct {
 	MaxLines         int
 	Verbose          bool
 	Diagnostics      io.Writer
+	// TargetCoverage is the combined-coverage goal for DiscoverMulti
+	// (0 < t <= 1). Zero means use the default (0.90). Ignored by the
+	// single-pattern Discover.
+	TargetCoverage float64
+}
+
+// MultiPatternResult is what DiscoverMulti returns: an ordered set of
+// standalone Grok patterns that together cover at least TargetCoverage of
+// the input. Each pattern is an independent, first-match-wins rule (the
+// shape a Logstash/Vector grok list expects), ordered so the first
+// explains the most lines and each subsequent one explains the most of
+// what remained. Per-pattern Coverage/MatchedCount are standalone figures;
+// CombinedCoverage/CombinedMatched describe the union of the whole set.
+type MultiPatternResult struct {
+	Patterns         []*DiscoveredPattern
+	CombinedCoverage float64
+	CombinedMatched  int
+	TotalLines       int
+	Estimated        bool
+	EvalLines        int
 }
 
 // ErrEmptyInput is returned when the input has no non-empty lines.
@@ -52,13 +79,12 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 		Verbose:          opts.Verbose,
 		Diagnostics:      opts.Diagnostics,
 	}
-	// Add a safety check for lines length
-	if len(lines) == 0 {
-		return nil, errors.New("log2grok: no input lines")
-	}	
-	if len(lines) > 100000 {
-		return nil, errors.New("log2grok: input lines too long, max is 100000")
-	}
+	// Inputs with no usable lines surface as ErrEmptyInput; empty and
+	// all-blank slices both route through pattern.Discover so callers get
+	// one consistent sentinel. There is no upper bound on line count:
+	// discovery samples large inputs internally (see DiscoveredPattern.
+	// Estimated) so a multi-million-line file stays within bounded memory
+	// and CPU. Callers that want a hard cap should set Options.MaxLines.
 	dp, err := pattern.Discover(lines, internalOpts)
 	if err != nil {
 		if errors.Is(err, pattern.ErrEmptyInput) {
@@ -75,6 +101,8 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 		TotalLines:     dp.TotalLines,
 		SampleLine:     dp.SampleLine,
 		Truncated:      dp.Truncated,
+		Estimated:      dp.Estimated,
+		EvalLines:      dp.EvalLines,
 		CustomPatterns: dp.CustomPatterns,
 	}
 	out.TimestampHint = inferTimestampHint(out.Grok)
@@ -97,12 +125,6 @@ func DiscoverTopK(lines []string, k int, opts Options) ([]*DiscoveredPattern, er
 		Verbose:          opts.Verbose,
 		Diagnostics:      opts.Diagnostics,
 	}
-	if len(lines) == 0 {
-		return nil, errors.New("log2grok: no input lines")
-	}
-	if len(lines) > 100000 {
-		return nil, errors.New("log2grok: input lines too long, max is 100000")
-	}
 	dps, err := pattern.DiscoverTopK(lines, k, internalOpts)
 	if err != nil {
 		if errors.Is(err, pattern.ErrEmptyInput) {
@@ -121,10 +143,67 @@ func DiscoverTopK(lines []string, k int, opts Options) ([]*DiscoveredPattern, er
 			TotalLines:     dp.TotalLines,
 			SampleLine:     dp.SampleLine,
 			Truncated:      dp.Truncated,
+			Estimated:      dp.Estimated,
+			EvalLines:      dp.EvalLines,
 			CustomPatterns: dp.CustomPatterns,
 		}
 		entry.TimestampHint = inferTimestampHint(entry.Grok)
 		out = append(out, entry)
+	}
+	return out, nil
+}
+
+// DiscoverMulti returns a set of standalone Grok patterns whose combined
+// coverage reaches opts.TargetCoverage (default 0.90). Use it for
+// multi-format inputs—mixed application, access, and syslog lines in one
+// stream—where a single pattern cannot fit. Where Discover commits to one
+// pattern (unioning shapes into an alternation when it must), DiscoverMulti
+// hands back the individual rules so each can be named and maintained
+// separately.
+//
+// Patterns are ordered by contribution and each carries its own coverage;
+// the result's CombinedCoverage/CombinedMatched describe the union. Like
+// Discover, large inputs are sampled internally (Estimated reports when the
+// figures are extrapolated).
+func DiscoverMulti(lines []string, opts Options) (*MultiPatternResult, error) {
+	internalOpts := pattern.Options{
+		LibraryThreshold: opts.LibraryThreshold,
+		MaxLines:         opts.MaxLines,
+		Verbose:          opts.Verbose,
+		Diagnostics:      opts.Diagnostics,
+		TargetCoverage:   opts.TargetCoverage,
+	}
+	res, err := pattern.DiscoverMulti(lines, internalOpts)
+	if err != nil {
+		if errors.Is(err, pattern.ErrEmptyInput) {
+			return nil, ErrEmptyInput
+		}
+		return nil, err
+	}
+	out := &MultiPatternResult{
+		Patterns:         make([]*DiscoveredPattern, 0, len(res.Patterns)),
+		CombinedCoverage: res.CombinedCoverage,
+		CombinedMatched:  res.CombinedMatched,
+		TotalLines:       res.TotalLines,
+		Estimated:        res.Estimated,
+		EvalLines:        res.EvalLines,
+	}
+	for _, dp := range res.Patterns {
+		entry := &DiscoveredPattern{
+			Source:         dp.Source,
+			SourceFamily:   dp.SourceFamily,
+			Grok:           dp.Grok,
+			Coverage:       dp.Coverage,
+			MatchedCount:   dp.MatchedCount,
+			TotalLines:     dp.TotalLines,
+			SampleLine:     dp.SampleLine,
+			Truncated:      dp.Truncated,
+			Estimated:      dp.Estimated,
+			EvalLines:      dp.EvalLines,
+			CustomPatterns: dp.CustomPatterns,
+		}
+		entry.TimestampHint = inferTimestampHint(entry.Grok)
+		out.Patterns = append(out.Patterns, entry)
 	}
 	return out, nil
 }

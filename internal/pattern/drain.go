@@ -21,6 +21,13 @@ type drainTemplate struct {
 	LineCount int
 }
 
+// defaultBackend is used only for its stateless Tokenize helper (it reads
+// the immutable config and never touches the matcher). Training must NOT
+// use it: a drain3 Matcher is per-training mutable state, and Discover may
+// leave a drain goroutine running in the background after a higher-priority
+// stage auto-accepts, so two trainings can overlap. Sharing one backend
+// across them would race on the matcher field. trainDrain builds a fresh
+// backend per call instead.
 var defaultBackend drainBackend = newAxiomDrain3Backend()
 
 type cluster struct {
@@ -37,7 +44,10 @@ type tplPart struct {
 }
 
 func trainDrain(lines []string) ([]cluster, error) {
-	return trainDrainWith(defaultBackend, lines)
+	// Fresh backend per call: each training owns its mutable matcher, so
+	// concurrent/overlapping Discover invocations never race. See the note
+	// on defaultBackend.
+	return trainDrainWith(newAxiomDrain3Backend(), lines)
 }
 
 func trainDrainWith(b drainBackend, lines []string) ([]cluster, error) {

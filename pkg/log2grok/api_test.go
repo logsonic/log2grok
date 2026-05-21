@@ -2,8 +2,71 @@ package log2grok
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 )
+
+// TestDiscoverMultiReturnsPatternSet confirms the public DiscoverMulti
+// hands back a set of standalone, compilable patterns for a multi-format
+// stream, with combined coverage clearing the requested target.
+func TestDiscoverMultiReturnsPatternSet(t *testing.T) {
+	var lines []string
+	for i := 0; i < 120; i++ {
+		switch i % 3 {
+		case 0:
+			lines = append(lines, fmt.Sprintf(`10.0.0.%d - - [15/Jan/2025:10:23:%02d +0000] "GET /p%d HTTP/1.1" 200 %d`, i%256, i%60, i%100, 100+i))
+		case 1:
+			lines = append(lines, fmt.Sprintf(`{"ts":"2025-01-15T10:23:%02dZ","level":"info","msg":"job %d"}`, i%60, i))
+		case 2:
+			lines = append(lines, fmt.Sprintf(`WORKER queue=email processed=%d latency=%dms`, i, i*3))
+		}
+	}
+	res, err := DiscoverMulti(lines, Options{LibraryThreshold: 0.85, TargetCoverage: 0.90})
+	if err != nil {
+		t.Fatalf("DiscoverMulti: %v", err)
+	}
+	if len(res.Patterns) < 2 {
+		t.Fatalf("got %d patterns, want >= 2", len(res.Patterns))
+	}
+	if res.CombinedCoverage < 0.90 {
+		t.Fatalf("combined coverage %.3f < 0.90", res.CombinedCoverage)
+	}
+	for _, p := range res.Patterns {
+		if p.Grok == "" {
+			t.Fatalf("empty grok in pattern set")
+		}
+		if _, err := CompileGrok(p.Grok, p.CustomPatterns); err != nil {
+			t.Fatalf("pattern %q failed to compile: %v", p.Source, err)
+		}
+	}
+}
+
+// TestDiscoverHandlesLargeInput confirms the public API no longer rejects
+// inputs above the old 100k hard cap, and that such inputs come back
+// flagged as Estimated with the matched count extrapolated to the full
+// total.
+func TestDiscoverHandlesLargeInput(t *testing.T) {
+	const n = 150000
+	lines := make([]string, n)
+	for i := 0; i < n; i++ {
+		lines[i] = fmt.Sprintf(
+			`10.0.0.%d - - [15/Jan/2025:10:23:%02d +0000] "GET /p%d HTTP/1.1" 200 %d`,
+			i%256, i%60, i%1000, 100+i%900)
+	}
+	dp, err := Discover(lines, Options{LibraryThreshold: 0.75})
+	if err != nil {
+		t.Fatalf("Discover on %d lines errored: %v", n, err)
+	}
+	if !dp.Estimated {
+		t.Fatalf("expected Estimated=true for %d lines", n)
+	}
+	if dp.TotalLines != n {
+		t.Fatalf("TotalLines = %d, want %d", dp.TotalLines, n)
+	}
+	if dp.EvalLines <= 0 || dp.EvalLines >= n {
+		t.Fatalf("EvalLines = %d, want a bounded sample below %d", dp.EvalLines, n)
+	}
+}
 
 func TestDiscoverExposesCustomPatternsForRoundTrip(t *testing.T) {
 	lines := []string{

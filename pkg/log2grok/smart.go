@@ -9,11 +9,11 @@ import (
 // goal is to surface obvious entities (IP, email, URL, MAC, UUID) for
 // downstream tooling, not to validate strict RFC syntax.
 var (
-	smartIPv4Re  = regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}\b`)
+	smartIPv4Re = regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}\b`)
 	// IPv6 in either full ("8 groups of 1-4 hex") or compressed ("::") form.
 	// Conservative left-anchor: previous char must not be a hex digit or
 	// colon, so we don't gobble the tail of a longer identifier.
-	smartIPv6Re = regexp.MustCompile(`(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|(?:[0-9A-Fa-f]{1,4}:){1,7}:[0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{1,4}){0,6}`)
+	smartIPv6Re  = regexp.MustCompile(`(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|(?:[0-9A-Fa-f]{1,4}:){1,7}:[0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{1,4}){0,6}`)
 	smartEmailRe = regexp.MustCompile(`\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b`)
 	smartURLRe   = regexp.MustCompile(`https?://[^\s)>\]"']+`)
 	smartMACRe   = regexp.MustCompile(`(?:[0-9A-Fa-f]{2}[:\-]){5}[0-9A-Fa-f]{2}`)
@@ -106,7 +106,7 @@ func filterIPv6Hits(in []string) []string {
 // omitted from the map (it stays nil if nothing was found) and leave
 // their slices nil on the struct.
 //
-// IPv6 detection is conservative: it requires at least two ``:''
+// IPv6 detection is conservative: it requires at least two “:”
 // separators so we don't false-positive on bare hex words. The legacy
 // map only contains keys that produced hits, preserving the original
 // wire shape; the new IPv6 key was added without breaking that — it
