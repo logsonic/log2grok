@@ -199,8 +199,14 @@ func buildMultiCandidates(sample, evalSet, drainSet []string, diag io.Writer) []
 	// Drain: every cluster rendered into its own pattern.
 	if clusters, err := trainDrain(drainSet); err == nil {
 		for _, cl := range clusters {
+			if cl.LineCount < drainMultiMinBranchLines {
+				continue
+			}
 			grok, ok := renderCluster(cl, drainSet)
 			if !ok {
+				continue
+			}
+			if !usefulDrainGrok(grok) {
 				continue
 			}
 			re, err := CompileGrok(grok, nil)

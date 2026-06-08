@@ -137,3 +137,30 @@ func TestDiscoverMultiGainFloor(t *testing.T) {
 		t.Fatalf("combined coverage %.3f, expected ~0.80 (the major formats only)", res.CombinedCoverage)
 	}
 }
+
+func TestDiscoverMultiDoesNotReturnLiteralDrainOneOffs(t *testing.T) {
+	lines := []string{
+		`connection refused by db-primary at shard 7`,
+		`cache warmed for tenant acme with 423 entries`,
+		`job 812 started on worker runner-4`,
+		`payment declined auth id ch_77 reason expired_card`,
+	}
+
+	res, err := DiscoverMulti(lines, Options{})
+	if err != nil {
+		t.Fatalf("DiscoverMulti: %v", err)
+	}
+	if len(res.Patterns) != 1 {
+		t.Fatalf("got %d patterns, want one safe fallback", len(res.Patterns))
+	}
+	p := res.Patterns[0]
+	if p.SourceFamily == "drain" {
+		t.Fatalf("source = %q, want fallback", p.Source)
+	}
+	if strings.Contains(p.Grok, "connection refused") || strings.Contains(p.Grok, "|(?:cache warmed") {
+		t.Fatalf("grok is a literal sample alternation: %q", p.Grok)
+	}
+	if p.Grok != `%{GREEDYDATA:message}` {
+		t.Fatalf("grok = %q, want message fallback", p.Grok)
+	}
+}

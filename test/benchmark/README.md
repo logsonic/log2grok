@@ -13,3 +13,9 @@ go test ./test/benchmark -run TestDiscoverCorrectnessSuite -v
 ```bash
 go test ./test/benchmark -bench BenchmarkDiscover -benchmem
 ```
+
+Focused honesty benchmarks for short/unknown inputs:
+
+```bash
+go test ./test/benchmark -bench 'BenchmarkDiscover.*Honesty' -benchmem
+```

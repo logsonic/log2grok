@@ -156,7 +156,7 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 			drainCh <- stageResult{diag: &buf}
 			return
 		}
-		accept := dp != nil && dp.Grok != "" && dp.Coverage >= 0.85
+		accept := dp != nil && dp.Grok != "" && dp.Coverage >= drainAutoAcceptCoverage
 		if accept {
 			fmt.Fprintf(&buf, "stage3 drain auto-accept: coverage=%.3f\n", dp.Coverage)
 		}
@@ -540,11 +540,28 @@ func deriveFromDrain(trainLines, evalLines []string, diag io.Writer) (*Discovere
 		}
 	}
 
-	// Reject severely overfit patterns: if Drain produced a pattern that
-	// matches fewer than ~20% of lines, it's almost certainly literal text
-	// that won't generalize. Fall through to fallback instead.
-	if cov < 0.20 {
-		fmt.Fprintf(diag, "drain: skipping overfit pattern (coverage %.3f < 0.20)\n", cov)
+	if !usefulDrainGrok(grok) {
+		fmt.Fprintf(diag, "drain: skipping literal-only pattern\n")
+		return nil, nil
+	}
+
+	// Short samples make partial Drain matches especially brittle: a
+	// two-line cluster in a five-line input is usually an accident, not a
+	// format. Keep Drain for short inputs only when it covers enough of the
+	// sample to auto-accept.
+	if len(evalLines) < drainShortSampleMinLines && cov < drainAutoAcceptCoverage {
+		fmt.Fprintf(diag, "drain: skipping weak short-sample pattern (coverage %.3f < %.2f, lines=%d < %d)\n",
+			cov, drainAutoAcceptCoverage, len(evalLines), drainShortSampleMinLines)
+		return nil, nil
+	}
+
+	// Reject weak partial Drain candidates. A minority cluster may be a
+	// valid sub-format, but in single-pattern discovery it is usually more
+	// honest to fall back unless Drain explains a meaningful share of the
+	// input. Multi-format callers should use DiscoverMulti for partial
+	// coverage.
+	if cov < drainMinCoverage {
+		fmt.Fprintf(diag, "drain: skipping weak pattern (coverage %.3f < %.2f)\n", cov, drainMinCoverage)
 		return nil, nil
 	}
 
@@ -563,6 +580,20 @@ func deriveFromDrain(trainLines, evalLines []string, diag io.Writer) (*Discovere
 // cluster is a poor fit for the whole input, so single-format logs (where
 // the dominant cluster already matches ~everything) never reach this code.
 var (
+	// drainAutoAcceptCoverage is the coverage required for a drain
+	// candidate to win immediately.
+	drainAutoAcceptCoverage = 0.85
+	// drainMinCoverage is the minimum coverage for a non-auto-accepted
+	// single Drain candidate. Below this, fallback is usually a more honest
+	// answer for single-pattern discovery.
+	drainMinCoverage = 0.50
+	// drainShortSampleMinLines is the evidence floor below which Drain is
+	// allowed to win only when it clears drainAutoAcceptCoverage.
+	drainShortSampleMinLines = 10
+	// drainMultiMinBranchLines rejects one-off clusters from Drain unions.
+	// A branch needs at least two observed lines before we present it as a
+	// reusable shape.
+	drainMultiMinBranchLines = 2
 	// multiPatternMinCoverage is the dominant-cluster coverage below which
 	// we consider unioning multiple clusters.
 	multiPatternMinCoverage = 0.85
@@ -604,8 +635,17 @@ func deriveMultiPattern(clusters []cluster, trainLines, evalLines []string, domi
 	}
 	var branches []branch
 	for _, c := range clusters {
+		if c.LineCount < drainMultiMinBranchLines {
+			fmt.Fprintf(diag, "drain multi: skipping cluster=%d support=%d < %d\n",
+				c.ID, c.LineCount, drainMultiMinBranchLines)
+			continue
+		}
 		grok, ok := renderCluster(c, trainLines)
 		if !ok {
+			continue
+		}
+		if !usefulDrainGrok(grok) {
+			fmt.Fprintf(diag, "drain multi: skipping literal-only cluster=%d\n", c.ID)
 			continue
 		}
 		re, err := CompileGrok(grok, nil)
@@ -620,6 +660,11 @@ func deriveMultiPattern(clusters []cluster, trainLines, evalLines []string, domi
 			}
 		}
 		if gained == 0 {
+			continue
+		}
+		if gained < drainMultiMinBranchLines {
+			fmt.Fprintf(diag, "drain multi: skipping cluster=%d gain=%d < %d\n",
+				c.ID, gained, drainMultiMinBranchLines)
 			continue
 		}
 		branches = append(branches, branch{grok: grok, re: re})
@@ -671,6 +716,10 @@ func renderCluster(c cluster, trainLines []string) (string, bool) {
 	return Render(sample, fields, slots), true
 }
 
+func usefulDrainGrok(grok string) bool {
+	return typedCaptureCount(grok) > 0
+}
+
 func deriveSafeFallback(lines []string) *DiscoveredPattern {
 	candidates := []struct {
 		Source string
@@ -684,6 +733,8 @@ func deriveSafeFallback(lines []string) *DiscoveredPattern {
 		{"fallback:Syslog Timestamp", `%{SYSLOGTIMESTAMP:timestamp}\s+%{GREEDYDATA:message}`},
 		{"fallback:Date Time", `%{DATE:date} %{TIME:time} %{GREEDYDATA:message}`},
 		{"fallback:ISO Timestamp", `%{TIMESTAMP_ISO8601:timestamp}\s+%{GREEDYDATA:message}`},
+		{"fallback:HTTP Request Summary", `%{WORD:method}\s+%{URIPATHPARAM:url}\s+%{INT:status}(?:\s+%{DURATION:duration})?`},
+		{"fallback:Log Level Message", `%{LOGLEVEL:level}\s+%{GREEDYDATA:message}`},
 		// Last resort
 		{"fallback:Message", `%{GREEDYDATA:message}`},
 	}

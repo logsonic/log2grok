@@ -55,3 +55,59 @@ func TestDiscoverMaxLinesSetsTruncated(t *testing.T) {
 		t.Fatalf("TotalLines = %d, want 2", dp.TotalLines)
 	}
 }
+
+func TestDiscoverShortHeterogeneousInputDoesNotLiteralUnion(t *testing.T) {
+	lines := []string{
+		`ALERT backend/api error code=E42 retry=false host=web-1`,
+		`WARN cache miss key=user:123 route=/v1/users latency=14ms`,
+		`INFO worker done job=778 queue=email elapsed=9ms`,
+	}
+
+	dp, err := Discover(lines, Options{})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	if strings.HasPrefix(dp.Source, "drain:multi(") {
+		t.Fatalf("source = %q, want non-drain fallback", dp.Source)
+	}
+	if strings.Contains(dp.Grok, "ALERT backend/api") || strings.Contains(dp.Grok, "|(?:WARN cache miss") {
+		t.Fatalf("grok is a literal sample alternation: %q", dp.Grok)
+	}
+	if dp.Grok != `%{LOGLEVEL:level}\s+%{GREEDYDATA:message}` {
+		t.Fatalf("grok = %q, want log-level fallback", dp.Grok)
+	}
+}
+
+func TestDiscoverSingleUnknownLineDoesNotReturnLiteralDrain(t *testing.T) {
+	lines := []string{`GET /api/users 200 12ms`}
+
+	dp, err := Discover(lines, Options{})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	if dp.SourceFamily == "drain" {
+		t.Fatalf("source = %q, want fallback for single unknown line", dp.Source)
+	}
+	if dp.Grok != `%{WORD:method}\s+%{URIPATHPARAM:url}\s+%{INT:status}(?:\s+%{DURATION:duration})?` {
+		t.Fatalf("grok = %q, want HTTP summary fallback", dp.Grok)
+	}
+}
+
+func TestDiscoverShortPartialDrainFallsBackToLogLevelMessage(t *testing.T) {
+	lines := []string{
+		`INFO api server started`,
+		`INFO api cache warmed`,
+		`INFO worker job finished`,
+	}
+
+	dp, err := Discover(lines, Options{})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	if dp.SourceFamily == "drain" {
+		t.Fatalf("source = %q, want fallback instead of partial short-sample Drain", dp.Source)
+	}
+	if dp.Grok != `%{LOGLEVEL:level}\s+%{GREEDYDATA:message}` {
+		t.Fatalf("grok = %q, want log-level fallback", dp.Grok)
+	}
+}

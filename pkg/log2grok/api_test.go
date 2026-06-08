@@ -90,6 +90,36 @@ func TestDiscoverExposesCustomPatternsForRoundTrip(t *testing.T) {
 	}
 }
 
+func TestDiscoverNoTimestampHTTPFallbackHasNoTimestampHint(t *testing.T) {
+	lines := []string{
+		`GET /api/users 200 12ms`,
+		`POST /api/jobs 202 31ms`,
+		`DELETE /api/jobs/8 404 4ms`,
+	}
+
+	dp, err := Discover(lines, Options{})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	want := `%{WORD:method}\s+%{URIPATHPARAM:url}\s+%{INT:status}(?:\s+%{DURATION:duration})?`
+	if dp.Source != "fallback:HTTP Request Summary" {
+		t.Fatalf("source = %q, want fallback:HTTP Request Summary", dp.Source)
+	}
+	if dp.Grok != want {
+		t.Fatalf("grok = %q, want %q", dp.Grok, want)
+	}
+	if !dp.TimestampHint.IsZero() {
+		t.Fatalf("TimestampHint = %+v, want zero for no-timestamp fallback", dp.TimestampHint)
+	}
+	re, err := CompileGrok(dp.Grok, dp.CustomPatterns)
+	if err != nil {
+		t.Fatalf("CompileGrok returned error: %v", err)
+	}
+	if matched := EvaluateCoverage(re, lines); matched != len(lines) {
+		t.Fatalf("coverage = %d/%d, want full coverage", matched, len(lines))
+	}
+}
+
 func TestDiscoverTopK_ReturnsRankedCandidates(t *testing.T) {
 	lines := []string{
 		`192.168.1.1 - - [23/Jan/2026:14:05:01 +0000] "GET / HTTP/1.1" 200 1`,
