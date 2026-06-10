@@ -43,14 +43,23 @@ func FillEmptyDescriptionsInPlace(lib []KnownPattern) {
 // Populated by RefreshLibrary from KnownPatternsLibrary.
 var KnownPatterns []KnownPattern
 
-// composeKnownPatterns rebuilds KnownPatterns from KnownPatternsLibrary.
+// composeKnownPatternsLocked rebuilds KnownPatterns from
+// KnownPatternsLibrary. patternStateMu must be held by the caller.
 // Dedup and sort are applied so the matcher sees a deterministic,
 // uniqued list.
-func composeKnownPatterns() {
-	KnownPatterns = make([]KnownPattern, 0, len(KnownPatternsLibrary))
-	KnownPatterns = append(KnownPatterns, KnownPatternsLibrary...)
+func composeKnownPatternsLocked() {
+	KnownPatterns = cloneKnownPatterns(KnownPatternsLibrary)
 	KnownPatterns = dedupKnownPatterns(KnownPatterns)
 	sortKnownPatterns(KnownPatterns)
+}
+
+// composeKnownPatterns rebuilds KnownPatterns from KnownPatternsLibrary.
+// Prefer RefreshLibrary for normal callers so dependent caches are reset too.
+func composeKnownPatterns() {
+	patternStateMu.Lock()
+	defer patternStateMu.Unlock()
+	composeKnownPatternsLocked()
+	patternStateVersion++
 }
 
 func sortKnownPatterns(in []KnownPattern) {

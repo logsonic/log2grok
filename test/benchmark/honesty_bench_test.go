@@ -35,16 +35,16 @@ func BenchmarkDiscoverHonestyPaths(b *testing.B) {
 			wantSource: "fallback:HTTP Request Summary",
 		},
 		{
-			name: "useful_short_drain",
+			name: "useful_short_tiling",
 			lines: []string{
 				`worker alpha processed 17 jobs from queue fast`,
 				`worker beta processed 22 jobs from queue slow`,
 				`worker gamma processed 19 jobs from queue default`,
 			},
-			wantSource: "drain",
+			wantSource: "inferred:Tiled",
 		},
 		{
-			name: "useful_short_drain_multi",
+			name: "useful_short_mixed_shapes",
 			lines: []string{
 				`API request id=100 status=ok`,
 				`API request id=101 status=fail`,
@@ -53,7 +53,7 @@ func BenchmarkDiscoverHonestyPaths(b *testing.B) {
 				`API request id=102 status=ok`,
 				`CACHE fill key=user:3 status=ok`,
 			},
-			sourcePrefix: "drain:multi(",
+			wantSource: "inferred:Tiled",
 		},
 		{
 			name: "repeated_literal_clusters",
@@ -65,7 +65,7 @@ func BenchmarkDiscoverHonestyPaths(b *testing.B) {
 				`INFO static worker ready`,
 				`INFO static worker ready`,
 			},
-			wantSource: "fallback:Log Level Message",
+			wantSource: "inferred:Tiled",
 		},
 		{
 			name: "weak_ten_line_minority",
@@ -113,7 +113,7 @@ func BenchmarkDiscoverMultiHonestyPaths(b *testing.B) {
 			wantSource: "fallback:Message",
 		},
 		{
-			name: "supported_short_drain_patterns",
+			name: "supported_short_shape_patterns",
 			lines: []string{
 				`API request id=100 status=ok`,
 				`API request id=101 status=fail`,
@@ -122,7 +122,7 @@ func BenchmarkDiscoverMultiHonestyPaths(b *testing.B) {
 				`API request id=102 status=ok`,
 				`CACHE fill key=user:3 status=ok`,
 			},
-			sourcePrefix: "drain:cluster-",
+			sourcePrefix: "inferred:",
 		},
 	}
 

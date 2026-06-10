@@ -26,7 +26,7 @@ func TestDiscoverNoTimestampHTTPFallback(t *testing.T) {
 	assertFullCoverage(t, dp, lines)
 }
 
-func TestDiscoverUsefulShortDrainSingleClusterStillWins(t *testing.T) {
+func TestDiscoverUsefulShortTilingStillWins(t *testing.T) {
 	lines := []string{
 		`worker alpha processed 17 jobs from queue fast`,
 		`worker beta processed 22 jobs from queue slow`,
@@ -37,16 +37,21 @@ func TestDiscoverUsefulShortDrainSingleClusterStillWins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Discover returned error: %v", err)
 	}
-	if dp.Source != "drain" {
-		t.Fatalf("source = %q, want drain", dp.Source)
+	if dp.Source != "inferred:Tiled" {
+		t.Fatalf("source = %q, want inferred:Tiled", dp.Source)
 	}
-	if !strings.Contains(dp.Grok, `%{WORD:worker}`) || !strings.Contains(dp.Grok, `%{INT:processed}`) {
-		t.Fatalf("grok = %q, want typed Drain captures", dp.Grok)
+	// The shared vocabulary (worker/processed/jobs/queue) is the evidence
+	// that lets a 3-line sample win; the varying slots must be typed.
+	if !strings.Contains(dp.Grok, `%{WORD:`) || !strings.Contains(dp.Grok, `%{INT:`) {
+		t.Fatalf("grok = %q, want typed captures", dp.Grok)
+	}
+	if !strings.Contains(dp.Grok, `worker`) || !strings.Contains(dp.Grok, `processed`) {
+		t.Fatalf("grok = %q, want shared keywords kept as literals", dp.Grok)
 	}
 	assertFullCoverage(t, dp, lines)
 }
 
-func TestDiscoverUsefulShortDrainMultiStillWins(t *testing.T) {
+func TestDiscoverUsefulShortMixedShapesStillWin(t *testing.T) {
 	lines := []string{
 		`API request id=100 status=ok`,
 		`API request id=101 status=fail`,
@@ -60,19 +65,22 @@ func TestDiscoverUsefulShortDrainMultiStillWins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Discover returned error: %v", err)
 	}
-	if !strings.HasPrefix(dp.Source, "drain:multi(") {
-		t.Fatalf("source = %q, want supported drain:multi union", dp.Source)
+	// The two shapes share a token layout, so the population-voting tiler
+	// generalizes them into ONE typed pattern (the old drain engine needed
+	// a two-branch union here).
+	if dp.Source != "inferred:Tiled" {
+		t.Fatalf("source = %q, want inferred:Tiled", dp.Source)
 	}
 	if strings.Contains(dp.Grok, "id=100") || strings.Contains(dp.Grok, "key=user:1") {
 		t.Fatalf("grok is too literal: %q", dp.Grok)
 	}
-	if !strings.Contains(dp.Grok, `%{NOTSPACE:value}`) || !strings.Contains(dp.Grok, `%{WORD:status}`) {
-		t.Fatalf("grok = %q, want generalized typed branches", dp.Grok)
+	if !strings.Contains(dp.Grok, `%{NOTSPACE:`) || !strings.Contains(dp.Grok, `%{WORD:`) {
+		t.Fatalf("grok = %q, want generalized typed captures", dp.Grok)
 	}
 	assertFullCoverage(t, dp, lines)
 }
 
-func TestDiscoverRepeatedLiteralClustersFallBack(t *testing.T) {
+func TestDiscoverRepeatedLiteralClustersGeneralize(t *testing.T) {
 	lines := []string{
 		`ERROR static api down`,
 		`ERROR static api down`,
@@ -86,11 +94,14 @@ func TestDiscoverRepeatedLiteralClustersFallBack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Discover returned error: %v", err)
 	}
-	if dp.SourceFamily == "drain" {
-		t.Fatalf("source = %q, want fallback for repeated literal clusters", dp.Source)
+	// All six lines share the `<LEVEL> static <w> <w>` layout, the level
+	// varies, and `static` is shared vocabulary — the tiler may generalize.
+	// What it must NOT do is freeze whole sample lines as literals.
+	if strings.Contains(dp.Grok, "api down") || strings.Contains(dp.Grok, "cache slow") {
+		t.Fatalf("grok froze sample text: %q", dp.Grok)
 	}
-	if dp.Grok != `%{LOGLEVEL:level}\s+%{GREEDYDATA:message}` {
-		t.Fatalf("grok = %q, want log-level fallback", dp.Grok)
+	if !strings.Contains(dp.Grok, `%{LOGLEVEL:level}`) {
+		t.Fatalf("grok = %q, want a typed level capture", dp.Grok)
 	}
 	assertFullCoverage(t, dp, lines)
 }
@@ -113,8 +124,8 @@ func TestDiscoverWeakTenLineDrainClusterFallsBack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Discover returned error: %v", err)
 	}
-	if dp.SourceFamily == "drain" {
-		t.Fatalf("source = %q, want fallback for weak minority Drain cluster", dp.Source)
+	if dp.SourceFamily == "inferred" {
+		t.Fatalf("source = %q, want fallback for weak minority shape", dp.Source)
 	}
 	if dp.Grok != `%{GREEDYDATA:message}` {
 		t.Fatalf("grok = %q, want message fallback", dp.Grok)

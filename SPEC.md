@@ -16,7 +16,7 @@
 - §8: `KnownPatterns` is composed in `init()` via an explicit `sortKnownPatterns`; the curated literal block was renamed `KnownPatternsCurated`. Dedup rules made explicit. CSV/TSV limitations documented.
 - §9: `HOSTNAME` allows underscores; `HTTPVERB` is case-insensitive; `URN` renamed to `COLONURI`.
 - §10: `%{NAME:field:type}` (Logstash type-cast) is parsed and ignored; `expandGrok` deduplicates colliding named captures by appending `_2`, `_3`, …; renderer iterates by rune for UTF-8 safety.
-- §11: drain3 access is wrapped in an internal `drainBackend` adapter interface; tokenization comes from the adapter, removing the parity assertion that couldn't be written against drain3 internals.
+- §11: the drain3 engine was retired in favour of the tiler (population-voted tiling); no third-party clustering dependency remains.
 - §13: `TestBundledCoverage` checks named-pattern presence instead of magic count thresholds; `TestLibraryMatchesItsExample` is tiered into *required* (curated) and *opportunistic* (bundled).
 - §15/§16: empty-input maps to exit code 1; stdin TTY check; `go.mod` shows a real pinned version syntax.
 
@@ -48,7 +48,6 @@ A log file usually has one dominant shape (e.g., every line is an Nginx access l
 |---|---|
 | Go | 1.22+ |
 | Standard library | only this and the dependency below |
-| `github.com/axiomhq/drain3` | latest, vendored |
 
 That's all. No web server. No frontend. No database. No other dependencies. If you find yourself reaching for a third library, stop and reread this section.
 
@@ -75,7 +74,7 @@ Instead, reason solely from:
 The program uses a staged matcher. Cheap, high-confidence checks run first; expensive or generic fallbacks run last. The goal is to match the dominant single-line format in real log files with high coverage, usually ≥ 99% for known formats, while still returning one usable pattern for unknown formats.
 
 ### Best-so-far semantics
-Every stage produces (at most) one candidate `DiscoveredPattern`. Stages do **not** drop a candidate just because it didn't clear an "auto-accept" threshold; they hand it forward as the current best-so-far. Only when a stage produces a *decisively* good result (see thresholds below) does `Discover` short-circuit and return immediately. Otherwise it runs all stages and returns the best candidate by `(coverage desc, useful_capture_count desc, source priority asc)`. This avoids the failure mode where a 0.88 structured probe and a 0.83 library hit are both rejected in favour of a 0.40 Drain pattern.
+Every stage produces (at most) one candidate `DiscoveredPattern`. Stages do **not** drop a candidate just because it didn't clear an "auto-accept" threshold; they hand it forward as the current best-so-far. Only when a stage produces a *decisively* good result (see thresholds below) does `Discover` short-circuit and return immediately. Otherwise it runs all stages and returns the best candidate by `(coverage desc, useful_capture_count desc, source priority asc)`. This avoids the failure mode where a 0.88 structured probe and a 0.83 library hit are both rejected in favour of a 0.40 inferred pattern.
 
 ### Stage 0 — Normalize and Sample
 Before matching anything:
@@ -87,7 +86,7 @@ Before matching anything:
 This keeps large files fast without making the result depend only on the beginning of a file.
 
 ### Stage 1 — Structured Format Probes
-Some formats are not best discovered by Drain or a flat library regex. Detect these by syntax first:
+Some formats are not best discovered by inference or a flat library regex. Detect these by syntax first:
 - JSON object logs: Docker JSON, Kubernetes app JSON, Pino/Bunyan, Zap JSON, ECS JSON, CloudTrail, Suricata EVE, auditd JSON.
 - `logfmt` / key-value logs: `ts=... level=info msg="..."`.
 - CEF and LEEF security events.
@@ -107,13 +106,13 @@ Do not accept the first match blindly. Pick the highest-scoring specific pattern
 
 Catchalls are useful, but they must never beat a source-specific pattern with similar coverage. The library auto-accepts at coverage ≥ `LibraryThreshold` (default 0.85); below that, the best library hit is still passed forward as best-so-far.
 
-### Stage 3 — Derive From Structure (Drain Fallback)
-If no earlier stage auto-accepted, derive a pattern from the file itself. Use Drain to find the dominant shape, classify variable slots with a rich token catalog, and render a Grok pattern around literal text. The Drain result is recorded as best-so-far if it beats the current best.
+### Stage 3 — Derive From Structure (Inference)
+If no earlier stage auto-accepted, derive a pattern from the file itself. The tiler segments a representative line into units, probes the whole sample with a relaxed alignment regex to collect each slot's observed values, types every slot by population vote (recovering sub-token structure like ip:port and recursively tiling stable quoted regions), and unions complementary shapes when no single shape fits. The result is recorded as best-so-far if it beats the current best.
 
 This catches custom application logs, internal services, one-off scripts, and new vendor formats.
 
 ### Stage 4 — Last-Resort Safe Pattern
-If neither earlier stages nor Drain produced anything usable, return the narrowest safe fallback:
+If neither earlier stages nor inference produced anything usable, return the narrowest safe fallback:
 - `%{TIMESTAMP_ISO8601:timestamp}\s+%{GREEDYDATA:message}` if most lines begin with ISO timestamps.
 - `%{SYSLOGTIMESTAMP:timestamp}\s+%{GREEDYDATA:message}` if most lines begin with RFC3164 timestamps.
 - `%{GREEDYDATA:message}` only as the absolute last resort.
@@ -192,10 +191,9 @@ log2grok/
 │       ├── score.go             # Candidate scoring, sample selection, specificity tie-breaks.
 │       ├── primitives.go        # The GrokPrimitives map[string]string (IPV4, NUMBER, etc.).
 │       ├── compile.go           # CompileGrok(): Grok pattern → *regexp.Regexp.
-│       ├── drain.go             # drainBackend interface and trainDrain orchestration.
-│       ├── drain_backend.go     # Default drainBackend implementation against axiomhq/drain3.
+│       ├── tiler.go             # From-scratch inference: segment → probe → vote → render.
 │       ├── tokenize.go          # tokenSpansOf(): locates backend tokens in source line.
-│       ├── classify.go          # ClassifySlot(): used by drain.go.
+│       ├── naming.go            # Field-name canonicalisation helpers.
 │       ├── render.go            # Render(): builds a Grok string from fields + sample line.
 │       ├── coverage.go          # EvaluateCoverage(): runs a regex against all lines.
 │       ├── embedded.go          # //go:embed of embedded/*.json + RefreshLibrary.
@@ -230,8 +228,8 @@ package log2grok
 
 // DiscoveredPattern is what Discover returns. ONE per call. Not a list.
 type DiscoveredPattern struct {
-    Source       string  // "library:Nginx Access Combined", "structured:JSON Object", "drain", or "fallback:*"
-    SourceFamily string  // "library" | "structured" | "drain" | "fallback" — machine-friendly slug
+    Source       string  // "library:Nginx Access Combined", "structured:JSON Object", "inferred:Tiled", or "fallback:*"
+    SourceFamily string  // "library" | "structured" | "inferred" | "fallback" — machine-friendly slug
     Grok         string  // the rendered Grok pattern (raw, unanchored)
     Coverage     float64 // 0.0–1.0; equals MatchedCount / TotalLines
     MatchedCount int
@@ -285,7 +283,7 @@ Example external import:
 import "log2grok/pkg/log2grok"
 ```
 
-Everything else (the library entries, the Drain adapter internals, the renderer) stays in `internal/pattern`. Junior engineers: keep the export surface small. If something doesn't need to be called from CLI or external tests, lowercase its name.
+Everything else (the library entries, the tiler internals, the renderer) stays in `internal/pattern`. Junior engineers: keep the export surface small. If something doesn't need to be called from CLI or external tests, lowercase its name.
 
 ---
 
@@ -332,8 +330,8 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
         best = pickBetter(best, dp)
     }
 
-    // STAGE 3 — Drain fallback. Auto-accept at >= 0.85, otherwise carry forward.
-    if dp, err := deriveFromDrain(normalized.MatchLines, diag); err == nil && dp != nil && dp.Grok != "" {
+    // STAGE 3 — inference fallback. Auto-accept at >= 0.85, otherwise carry forward.
+    if dp := tryTiling(sample, normalized.MatchLines, diag); dp != nil && dp.Grok != "" {
         if dp.Coverage >= 0.85 {
             return dp, nil
         }
@@ -373,7 +371,7 @@ func familyRank(family string) int {
     switch family {
     case "library":    return 0
     case "structured": return 1
-    case "drain":      return 2
+    case "inferred":   return 2
     case "fallback":   return 3
     default:           return 4
     }
@@ -487,42 +485,37 @@ func tryLibrary(sample, all []string, threshold float64, diag io.Writer) *Discov
     }
 }
 
-// deriveFromDrain runs Drain, uses the largest cluster as the source of one
-// output pattern, classifies slots, renders Grok, and reports full coverage.
-func deriveFromDrain(lines []string, diag io.Writer) (*DiscoveredPattern, error) {
-    clusters, err := trainDrain(lines)
-    if err != nil {
-        return nil, err
+// tryTiling is the from-scratch inference engine: segment a representative
+// ("template") line into units, probe the whole sample with a relaxed
+// alignment regex to collect each slot's observed values, type every slot by
+// population vote, render the Grok, and score it on the full input. When no
+// single shape explains the input but a handful of shapes together do, the
+// complementary shapes are unioned into one alternation.
+func tryTiling(sample, all []string, diag io.Writer) *DiscoveredPattern {
+    shapes := tileShapes(sample, all, tileShapeTemplates) // one tiling per distinct line shape
+    cand := bestTiling(shapes, all)                       // best shape, tail-relaxed if that buys coverage
+    if cand == nil {
+        return nil
     }
-    if len(clusters) == 0 {
-        return nil, errors.New("drain produced no clusters")
+    cov := ratio(cand.Matched, cand.Total)
+    if cov < tiledUnionTrigger {
+        if u := tiledUnion(shapes, all, cov, diag); u != nil {
+            return u // "inferred:multi(N)"
+        }
     }
-    dominant := clusters[0] // use one dominant shape only
-    if dominant.SampleLineIdx < 0 || dominant.SampleLineIdx >= len(lines) {
-        return nil, errors.New("drain dominant cluster has no representative line")
+    // honesty gates: evidence floor, short-sample shared-keyword rule,
+    // minimum coverage, and at least one informative typed capture.
+    if !passesHonestyGates(cand, all) {
+        return nil
     }
-
-    sample := lines[dominant.SampleLineIdx]
-    slots := resolveSlots(dominant, lines)
-    fields := autoFieldsFromSlots(slots, sample, dominant)
-    grok := Render(sample, fields, slots)
-
-    re, err := CompileGrok(grok, nil)
-    if err != nil {
-        return nil, fmt.Errorf("rendered pattern failed to compile: %w", err)
-    }
-    matched := EvaluateCoverage(re, lines)
-    fmt.Fprintf(diag, "drain: cluster=%d matched=%d/%d\n", dominant.ID, matched, len(lines))
-
     return &DiscoveredPattern{
-        Source:       "drain",
-        SourceFamily: "drain",
-        Grok:         grok,
-        Coverage:     ratio(matched, len(lines)),
-        MatchedCount: matched,
-        TotalLines:   len(lines),
-        SampleLine:   sample,
-    }, nil
+        Source:       "inferred:Tiled",
+        SourceFamily: "inferred",
+        Grok:         cand.Grok,
+        Coverage:     cov,
+        MatchedCount: cand.Matched,
+        TotalLines:   cand.Total,
+    }
 }
 
 func deriveSafeFallback(lines []string) *DiscoveredPattern {
@@ -577,7 +570,7 @@ func ratio(num, denom int) float64 {
 Notice what's preserved:
 - `Discover` still returns one `DiscoveredPattern`.
 - Structured probes and the library may evaluate many candidates internally, but only one pattern is returned.
-- Drain still contributes one dominant-shape pattern, not one pattern per cluster.
+- The tiler contributes one best-shape pattern (or one shape union), not one pattern per shape.
 
 ### Performance rules
 - Compile `KnownPatterns` once with `sync.Once`; never compile every pattern for every `Discover` call.
@@ -1010,7 +1003,7 @@ Adding a new format means adding a JSON object to `internal/pattern/embedded/pat
 - A golden corpus if the format is common enough to regress accidentally.
 
 ### Why the catalog is broad
-Most real logs are not random. They come from a smaller set of emitters: web servers, syslog daemons, cloud services, containers, databases, security products, and language logging libraries. Cover those families explicitly, handle structured syntaxes generically, and let Drain handle the long tail. That combination is what gets close to "works on almost every single-line log file" without returning useless `%{GREEDYDATA}` for everything.
+Most real logs are not random. They come from a smaller set of emitters: web servers, syslog daemons, cloud services, containers, databases, security products, and language logging libraries. Cover those families explicitly, handle structured syntaxes generically, and let the tiler handle the long tail. That combination is what gets close to "works on almost every single-line log file" without returning useless `%{GREEDYDATA}` for everything.
 
 ### Structured probes
 Structured probes live beside the library because they produce the same output type: one Grok pattern.
@@ -1304,451 +1297,74 @@ Logstash semantics promote nested named captures to top-level fields (`%{SYSLOGB
 Some log files have Windows line endings (`\r\n`). When you read them line-by-line in Go, the `\r` stays attached to the line. Allowing an optional trailing `\r` means our patterns work on both Unix and Windows logs.
 
 ### UTF-8 safety
-The Grok primitives in §9 are all ASCII regexes, but the *literal* portions of patterns produced by the Drain/Render path come straight from sample log lines, which may be UTF-8. The renderer (§12) iterates by rune and quotes whole runes via `regexp.QuoteMeta`, never by byte. Do not split a multi-byte rune across `regexp.QuoteMeta` calls — that produces a regex that compiles but never matches.
+The Grok primitives in §9 are all ASCII regexes, but the *literal* portions of patterns produced by the tiler come straight from sample log lines, which may be UTF-8. The renderer (§11) quotes literal unit text via `regexp.QuoteMeta` on whole strings, never on split runes. Do not split a multi-byte rune across `regexp.QuoteMeta` calls — that produces a regex that compiles but never matches.
 
 ---
 
-## 11. The Drain Fallback
+## 11. The Inference Engine (the Tiler)
 
-`axiomhq/drain3` clusters log lines by their structure — it figures out that "User X logged in from IP Y" and "User Z logged in from IP W" share the template "User `<*>` logged in from IP `<*>`."
+When neither a structured probe nor the library explains the input, the tiler
+derives a pattern from the data itself. Its core principle: **structure comes
+from one template line; semantics come from the population.**
 
-### Adapter interface
-We do not call `axiomhq/drain3` directly from `discovery.go`. The exact shape of the upstream API has changed between versions and not all of its fields are part of the public surface. Instead, `internal/pattern/drain.go` defines a small adapter and an implementation file for the chosen drain3 version. This isolates upstream churn behind one file and makes the rest of the package testable with a mock.
+1. **Segment** a representative ("template") line into units: literal
+   delimiter runs, quoted regions, multi-token composite timestamps, and
+   plain tokens. Composite timestamps (`02 Oct 2024 17:01:06`,
+   `2026/04/29 01:00:03.123`, RFC3164, HTTPDATE…) are matched as one unit by
+   a prefix recogniser paired with the exact Grok expression that will be
+   rendered for the span; the expression must full-match the span, so the
+   recogniser and the rendered Grok can never disagree.
+2. **Probe** the whole sample with a relaxed alignment regex — every token
+   becomes `(\S+)`, every quoted region `"([^"]*)"`, literals stay verbatim —
+   and collect each slot's observed value set. Lines that share the literal
+   skeleton are the shape's population; lines that don't simply fail the
+   probe (this is the tiler's clustering).
+3. **Type** each slot by voting the most specific primitive that matches all
+   of its observed values. The voting table is derived from the real Grok
+   primitives at runtime. Rules:
+   - A constant keyword (non-promoted type, single distinct value) demotes
+     to a literal. Constant *data* does not: a slot matching a
+     high-confidence type (timestamp, IP, number, level, id, duration, path)
+     stays a field even when the sample never varies it.
+   - A slot whose values share an internal `:/#@` separator signature is
+     sub-tiled into typed columns (`192.0.1.1:443` → `%{IPV4:ip}:%{INT:n}`,
+     `0/0/1/2/3` → five `%{INT}`s, `HTTP/1.1` → `HTTP/%{NUMBER:n}`),
+     accepted only when at least one column carries a high-confidence type.
+   - A slot that is sometimes `-` gets a dash alternation:
+     `(?:%{INT:bytes}|-)`.
+   - A quoted region is recursively tiled when its inner structure is stable
+     across all observed values; otherwise it becomes `%{DATA}` (quoted
+     strings are exactly where free text lives).
+   - Grammar rule: the token after a leading RFC3164/RFC5424 timestamp is
+     `%{HOSTNAME:hostname}` — guaranteed by the grammar, not by variation.
+4. **Brute-force** over up to 16 template lines (deduped by a char-class
+   skeleton so genuinely different shapes are tried). Score every tiling on
+   the full input; keep the best. Then try relaxing the tail into
+   `%{GREEDYDATA:message}` at successive field boundaries, keeping the
+   relaxation only when it buys real coverage (≥2% of lines) — rigid
+   prefix + varied message tail is the most common real-world log shape.
+5. **Union**: when the best single shape explains < 0.85 of the input but a
+   handful of shapes together explain ≥ 0.90 (each newly explaining ≥ 2
+   lines), return the branches as one alternation (`inferred:multi(N)`).
 
-```go
-// internal/pattern/drain.go
-package pattern
+Honesty gates: an absolute 3-line evidence floor; short samples (< 10 lines)
+additionally require ≥ 0.85 coverage AND at least one shared literal keyword
+(three random four-word sentences align structurally — three
+`worker <w> processed <n> jobs` lines share vocabulary); ≥ 0.50 coverage
+overall; and at least one high-confidence field (or shared keywords plus two
+typed captures). Below the gates the safe fallback is the more honest answer.
 
-// drainBackend is the only abstraction the rest of the package depends on.
-// The default implementation, defaultDrainBackend, calls into axiomhq/drain3
-// and lives in drain_backend.go. Tests substitute a mock.
-type drainBackend interface {
-    // Train ingests every line and builds clusters.
-    Train(lines []string) error
+Quality is measured by `TestFieldRecoveryHarness`: with the library and
+structured probes disabled, the tiler must reconstruct ≥ 0.95 (currently
+0.999) of the expert-written golden patterns' high-information field
+structure, scored by longest-common-subsequence over semantic field classes.
 
-    // Templates returns clusters sorted by descending support
-    // (largest cluster first).
-    Templates() []drainTemplate
+The renderer walks the typed unit tree and emits literals through
+`regexp.QuoteMeta` (rune-safe for UTF-8) and fields as `%{TYPE:name}`. Field
+names come from a preceding `key=` / `key:` literal when present (canonical
+aliases: `ts` → `timestamp`, `rt` → `duration`, `lvl` → `level`, …), else
+from the primitive's hint, deduplicated with `_2`/`_3` suffixes.
 
-    // ClusterIDOf returns the ID of the cluster that `line` was assigned to,
-    // and false if the backend cannot classify it.
-    ClusterIDOf(line string) (int, bool)
-
-    // Tokenize returns the same tokens drain3 used internally to score `line`.
-    // Returning these directly removes the parity problem of reimplementing
-    // drain3's tokenizer in our own code.
-    Tokenize(line string) []string
-}
-
-// drainTemplate is the post-clustering shape we consume. It is intentionally
-// flatter than drain3's Template so that the rest of the package never imports
-// drain3 types.
-type drainTemplate struct {
-    ID         int
-    Tokens     []string // each entry is either a literal token or "<*>" for a slot
-    LineCount  int
-}
-
-var defaultBackend drainBackend = newAxiomDrain3Backend()
-
-type cluster struct {
-    ID            int
-    Template      []tplPart
-    TokenCount    int
-    LineCount     int
-    SampleLineIdx int  // first line in the input that belongs to this cluster
-}
-
-type tplPart struct {
-    IsSlot bool   // true: variable position; false: literal token
-    Token  string // literal value when !IsSlot
-}
-
-func trainDrain(lines []string) ([]cluster, error) {
-    return trainDrainWith(defaultBackend, lines)
-}
-
-func trainDrainWith(b drainBackend, lines []string) ([]cluster, error) {
-    if err := b.Train(lines); err != nil {
-        return nil, err
-    }
-    tmpls := b.Templates()
-    sampleIdx := indexFirstSampleLine(lines, b)
-
-    out := make([]cluster, 0, len(tmpls))
-    for _, t := range tmpls {
-        idx, ok := sampleIdx[t.ID]
-        if !ok {
-            idx = -1
-        }
-        out = append(out, cluster{
-            ID:            t.ID,
-            Template:      buildTplParts(t),
-            TokenCount:    len(t.Tokens),
-            LineCount:     t.LineCount,
-            SampleLineIdx: idx,
-        })
-    }
-    return out, nil
-}
-
-// drainExtraDelimiters is passed into the backend's configuration. Keep it
-// conservative. Do not add ":" because it breaks timestamps, IPv6,
-// host:port values, and Java logger names into fragments.
-var drainExtraDelimiters = []string{"=", ",", "|"}
-
-func indexFirstSampleLine(lines []string, b drainBackend) map[int]int {
-    out := make(map[int]int, 32)
-    for i, line := range lines {
-        if id, ok := b.ClusterIDOf(line); ok {
-            if _, seen := out[id]; !seen {
-                out[id] = i
-            }
-        }
-    }
-    return out
-}
-
-// buildTplParts converts a drainTemplate's Tokens slice into the interleaved
-// literal/slot sequence the renderer wants.
-func buildTplParts(t drainTemplate) []tplPart {
-    parts := make([]tplPart, 0, len(t.Tokens))
-    for _, tok := range t.Tokens {
-        if tok == "<*>" {
-            parts = append(parts, tplPart{IsSlot: true})
-        } else {
-            parts = append(parts, tplPart{IsSlot: false, Token: tok})
-        }
-    }
-    return parts
-}
-```
-
-`drain_backend.go` is where the actual drain3 calls live. Its job is small: call drain3 with the configured similarity threshold and `drainExtraDelimiters`, then translate each upstream template into a `drainTemplate`, including a `Tokens []string` whose length equals `t.TokenCount` and whose `<*>` markers stand in for slot positions. Pin the drain3 dependency in `go.mod` and update only this file when bumping versions.
-
-### Tokenization — bridging tokens and characters
-Drain operates on tokens (words). The Grok pattern operates on characters. We need to know where each token starts and ends in the original line. Because `drainBackend.Tokenize` returns the exact sequence drain3 used, the only thing we have to do is locate each token in the source line — we don't need a parallel tokenizer.
-
-```go
-// internal/pattern/tokenize.go
-package pattern
-
-import "strings"
-
-type tokenSpan struct {
-    Start, End int
-    Text       string
-}
-
-// tokenSpansOf locates each `tokens[i]` inside `line` in order. It walks the
-// line forward, using the next token as a needle, so two equal tokens in a
-// line still get distinct spans.
-//
-// If a token cannot be located (e.g. drain3 normalized it before clustering),
-// the corresponding span is the empty range and the caller falls back to
-// re-tokenizing.
-func tokenSpansOf(line string, tokens []string) []tokenSpan {
-    out := make([]tokenSpan, 0, len(tokens))
-    cursor := 0
-    for _, tok := range tokens {
-        if tok == "<*>" || tok == "" {
-            out = append(out, tokenSpan{Start: cursor, End: cursor})
-            continue
-        }
-        idx := strings.Index(line[cursor:], tok)
-        if idx < 0 {
-            out = append(out, tokenSpan{Start: cursor, End: cursor})
-            continue
-        }
-        start := cursor + idx
-        end := start + len(tok)
-        out = append(out, tokenSpan{Start: start, End: end, Text: tok})
-        cursor = end
-    }
-    return out
-}
-```
-
-### Slot resolution
-For the dominant cluster, work out where each variable slot sits in the sample line, and what values appeared in that slot across all matching lines:
-
-```go
-type slotRange struct {
-    SlotIndex   int
-    Start, End  int
-    Values      []string
-}
-
-func resolveSlots(c cluster, lines []string) []slotRange {
-    if c.SampleLineIdx < 0 || c.SampleLineIdx >= len(lines) {
-        return nil
-    }
-    sample := lines[c.SampleLineIdx]
-    sampleTokens := defaultBackend.Tokenize(sample)
-    if len(sampleTokens) != c.TokenCount {
-        return nil // backend disagrees with itself; bail
-    }
-    spans := tokenSpansOf(sample, sampleTokens)
-
-    var slots []slotRange
-    var slotPos []int
-    for i, p := range c.Template {
-        if !p.IsSlot {
-            continue
-        }
-        if i >= len(spans) {
-            return nil
-        }
-        slots = append(slots, slotRange{
-            SlotIndex: i,
-            Start:     spans[i].Start,
-            End:       spans[i].End,
-        })
-        slotPos = append(slotPos, i)
-    }
-
-    // Collect the actual values that appeared in each slot, by re-tokenizing
-    // every line that belongs to this cluster.
-    for _, line := range lines {
-        toks := defaultBackend.Tokenize(line)
-        if len(toks) != c.TokenCount { continue }
-        for si, pos := range slotPos {
-            if pos >= len(toks) { continue }
-            slots[si].Values = append(slots[si].Values, toks[pos])
-        }
-    }
-    return slots
-}
-```
-
-### Per-slot classification
-For each slot, run a small set of regexes against the values. The first regex that matches ≥ 95% of the values claims the slot.
-
-```go
-// internal/pattern/classify.go
-package pattern
-
-import "regexp"
-
-type fieldType struct {
-    GrokName string
-    Regex    *regexp.Regexp
-    Priority int
-    NameHint string
-}
-
-var fieldTypes = []fieldType{
-    {GrokName: "TIMESTAMP_ISO8601", Regex: re(`^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?$`), Priority: 1, NameHint: "timestamp"},
-    {GrokName: "SYSLOGTIMESTAMP",   Regex: re(`^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2} \d{2}:\d{2}:\d{2}$`), Priority: 1, NameHint: "timestamp"},
-    {GrokName: "HTTPDATE",          Regex: re(`^\d{2}/[A-Za-z]{3}/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4}$`), Priority: 1, NameHint: "timestamp"},
-    {GrokName: "UNIXMS",            Regex: re(`^\d{13}$`), Priority: 2, NameHint: "timestamp_ms"},
-    {GrokName: "UNIX",              Regex: re(`^\d{10}$`), Priority: 2, NameHint: "timestamp"},
-    {GrokName: "UUID",              Regex: re(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`), Priority: 3, NameHint: "id"},
-    {GrokName: "TRACEID",           Regex: re(`^[0-9a-fA-F]{32}$`), Priority: 3, NameHint: "trace_id"},
-    {GrokName: "SPANID",            Regex: re(`^[0-9a-fA-F]{16}$`), Priority: 3, NameHint: "span_id"},
-    {GrokName: "MAC",               Regex: re(`^(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$`), Priority: 4, NameHint: "mac"},
-    {GrokName: "IPV4",              Regex: re(`^(?:(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d?\d)$`), Priority: 5, NameHint: "ip"},
-    {GrokName: "IPV6",              Regex: re(`^(?:[0-9A-Fa-f]{0,4}:){2,}[0-9A-Fa-f]{0,4}$`), Priority: 5, NameHint: "ip"},
-    {GrokName: "HOSTPORT",          Regex: re(`^[A-Za-z0-9_.:-]+:\d+$`), Priority: 6, NameHint: "endpoint"},
-    {GrokName: "EMAILADDRESS",      Regex: re(`^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$`), Priority: 7, NameHint: "email"},
-    {GrokName: "URI",               Regex: re(`^[A-Za-z][A-Za-z0-9+\-.]*://\S+$`), Priority: 8, NameHint: "url"},
-    {GrokName: "URIPATHPARAM",      Regex: re(`^/[^\s#]*(?:\?[^\s#]*)?$`), Priority: 9, NameHint: "path"},
-    {GrokName: "URIPATH",           Regex: re(`^/[^\s?#]*$`), Priority: 10, NameHint: "path"},
-    {GrokName: "LOGLEVEL",          Regex: re(`^(?i:trace|debug|info|notice|warn(?:ing)?|err(?:or)?|crit(?:ical)?|fatal|panic|alert|emerg(?:ency)?|verbose)$`), Priority: 11, NameHint: "level"},
-    {GrokName: "DURATION",          Regex: re(`^\d+(?:\.\d+)?(?:ns|us|µs|ms|s|m|h)$`), Priority: 12, NameHint: "duration"},
-    {GrokName: "BOOLEAN",           Regex: re(`^(?i:true|false|yes|no|on|off)$`), Priority: 13, NameHint: "flag"},
-    {GrokName: "BASE16NUM",         Regex: re(`^(?:0[xX][0-9A-Fa-f]+|[0-9A-Fa-f]*[A-Fa-f][0-9A-Fa-f]*)$`), Priority: 14, NameHint: "hex"},
-    {GrokName: "INT",               Regex: re(`^[+-]?\d+$`), Priority: 15, NameHint: "n"},
-    {GrokName: "FLOAT",             Regex: re(`^[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?$`), Priority: 16, NameHint: "n"},
-    {GrokName: "NUMBER",            Regex: re(`^-?\d+(?:\.\d+)?$`), Priority: 17, NameHint: "n"},
-    {GrokName: "QUOTEDSTRING",      Regex: re(`^"(?:\\.|[^"\\])*"$`), Priority: 18, NameHint: "text"},
-    {GrokName: "WORD",              Regex: re(`^\w+$`), Priority: 19, NameHint: "word"},
-    {GrokName: "NOTSPACE",          Regex: re(`^\S+$`), Priority: 20, NameHint: "value"},
-}
-
-func re(s string) *regexp.Regexp { return regexp.MustCompile(s) }
-
-const slotMatchThreshold = 0.95
-
-func classifySlot(values []string) *fieldType {
-    if len(values) == 0 { return nil }
-    for _, ft := range fieldTypes {
-        hits := 0
-        for _, v := range values {
-            if ft.Regex.MatchString(v) { hits++ }
-        }
-        if float64(hits)/float64(len(values)) >= slotMatchThreshold {
-            return &ft
-        }
-    }
-    return nil
-}
-```
-
-### Field naming heuristic
-A slot's field name should come from context whenever possible. Prefer stable key names (`request_id=...`, `trace_id:...`, `user: ...`) over generic names. Normalize common aliases to canonical names (`ts` → `timestamp`, `msg` → `message`, `lvl` → `level`, `method` → `http_method`, `path` → `url_path`, `status` → `status_code`). Otherwise use the type's `NameHint`, with a `_2`, `_3` suffix on collisions.
-
-```go
-type field struct {
-    Start    int
-    End      int
-    GrokType string
-    Name     string
-}
-
-func autoFieldsFromSlots(slots []slotRange, sample string, c cluster) []field {
-    used := make(map[string]int) // name → count, for collision suffixes
-    fields := make([]field, 0, len(slots))
-
-    for _, s := range slots {
-        ft := classifySlot(s.Values)
-        if ft == nil { continue }
-
-        name := suggestName(c, s, ft)
-        if used[name] > 0 {
-            name = fmt.Sprintf("%s_%d", name, used[name]+1)
-        }
-        used[name]++
-
-        fields = append(fields, field{
-            Start:    s.Start,
-            End:      s.End,
-            GrokType: ft.GrokName,
-            Name:     name,
-        })
-    }
-    return fields
-}
-
-func suggestName(c cluster, s slotRange, ft *fieldType) string {
-    // Look at the literal token directly before this slot.
-    if s.SlotIndex > 0 {
-        prev := c.Template[s.SlotIndex-1]
-        if !prev.IsSlot {
-            stripped := strings.TrimRight(prev.Token, ":=")
-            if isValidName(stripped) {
-                return canonicalName(strings.ToLower(stripped))
-            }
-        }
-    }
-    return ft.NameHint
-}
-
-var nameRe = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
-func isValidName(s string) bool { return nameRe.MatchString(strings.ToLower(s)) }
-
-// canonicalNames is intentionally conservative. It aliases obvious synonyms
-// for fields whose meaning is the same regardless of context (`ts` → timestamp,
-// `lvl` → level). It does NOT canonicalize ambiguous names like `method` or
-// `path`, which mean different things in HTTP, RPC, and database contexts;
-// those keep their original token names.
-var canonicalNames = map[string]string{
-    "ts": "timestamp", "time": "timestamp", "timestamp": "timestamp",
-    "lvl": "level", "levelname": "level", "severity": "level",
-    "msg": "message", "message": "message",
-    "logger_name": "logger", "log": "logger",
-    "statuscode": "status_code",
-    "latency": "duration",
-    "trace": "trace_id", "traceid": "trace_id",
-    "span": "span_id", "spanid": "span_id",
-}
-
-func canonicalName(s string) string {
-    s = strings.Trim(s, `"'[](){}<>`)
-    s = strings.ToLower(strings.ReplaceAll(s, "-", "_"))
-    if mapped, ok := canonicalNames[s]; ok {
-        return mapped
-    }
-    return s
-}
-```
-
----
-
-## 12. The Renderer
-
-`Render` walks the sample line one rune at a time (not byte — see UTF-8 note below). At each position:
-1. If a field starts here, emit `%{TYPE:name}` and skip to the end of the field.
-2. Else if an uncovered Drain slot starts here, emit `%{NOTSPACE:unparsed_N}`. (The current pipeline only produces token-sized slots — no slot ever spans whitespace — so a `%{GREEDYDATA:unparsed_N}` form is intentionally not used. Bringing back multi-token slots is future work.)
-3. Else emit one regex-escaped rune and advance.
-
-Each `field.Start/End` is built directly from a slot's range in `autoFieldsFromSlots`, so a field always exactly covers its slot. The renderer therefore matches by exact range, not by sub-range. (Earlier drafts of this spec described a sub-range case; the renderer never supported it and the test description was out of date.)
-
-```go
-// internal/pattern/render.go
-package pattern
-
-import (
-    "regexp"
-    "sort"
-    "strconv"
-    "strings"
-    "unicode/utf8"
-)
-
-func Render(sample string, fields []field, slots []slotRange) string {
-    sorted := append([]field(nil), fields...)
-    sort.Slice(sorted, func(i, j int) bool { return sorted[i].Start < sorted[j].Start })
-
-    // Which slots are already covered by a field?
-    covered := make(map[int]bool)
-    for _, s := range slots {
-        for _, f := range sorted {
-            if f.Start == s.Start && f.End == s.End {
-                covered[s.SlotIndex] = true
-                break
-            }
-        }
-    }
-
-    slotByStart := make(map[int]slotRange, len(slots))
-    for _, s := range slots { slotByStart[s.Start] = s }
-
-    var b strings.Builder
-    cursor, fieldI, unparsedN := 0, 0, 0
-
-    for cursor < len(sample) {
-        if fieldI < len(sorted) && sorted[fieldI].Start == cursor {
-            f := sorted[fieldI]
-            b.WriteString("%{")
-            b.WriteString(f.GrokType)
-            b.WriteString(":")
-            b.WriteString(f.Name)
-            b.WriteString("}")
-            cursor = f.End
-            fieldI++
-            continue
-        }
-        if s, ok := slotByStart[cursor]; ok && !covered[s.SlotIndex] {
-            unparsedN++
-            b.WriteString("%{NOTSPACE:unparsed_")
-            b.WriteString(strconv.Itoa(unparsedN))
-            b.WriteString("}")
-            cursor = s.End
-            continue
-        }
-        // Advance one whole rune at a time so multi-byte UTF-8 sequences are
-        // quoted as a single character. Quoting per byte would split a rune
-        // across two QuoteMeta calls and produce a regex that compiles but
-        // never matches.
-        r, size := utf8.DecodeRuneInString(sample[cursor:])
-        if r == utf8.RuneError && size <= 1 {
-            // Invalid byte — preserve it as-is via QuoteMeta so we don't lose
-            // alignment with the original line, even if it can never match.
-            b.WriteString(regexp.QuoteMeta(sample[cursor : cursor+1]))
-            cursor++
-            continue
-        }
-        b.WriteString(regexp.QuoteMeta(sample[cursor : cursor+size]))
-        cursor += size
-    }
-    return b.String()
-}
-```
-
-`regexp.QuoteMeta` is important: the literal parts of the sample line (spaces, brackets, slashes) might contain regex metacharacters. We need them escaped so the Grok pattern matches them literally.
-
----
 
 ## 13. Tests
 
@@ -1839,7 +1455,7 @@ func TestLibraryCoverage(t *testing.T) {
 }
 ```
 
-### 13.3 `TestStructuredProbes` — structured syntaxes are detected before Drain
+### 13.3 `TestStructuredProbes` — structured syntaxes are detected before inference
 Create sample corpora for JSON object logs, Docker JSON, Pino/Bunyan, logfmt, CEF, LEEF, IIS/W3C, CSV, and TSV. Assert each one returns `Source` beginning with `structured:` and coverage ≥ 0.95.
 
 ```go
@@ -1919,8 +1535,8 @@ func TestGoldenCorpora(t *testing.T) {
 }
 ```
 
-### 13.7 `TestDrainBackendSelfConsistent` — backend Tokenize/Templates agree
-On a 1000-line corpus, train the default `drainBackend`, then for every cluster assert that `len(b.Tokenize(line)) == len(template.Tokens)` for every line that `ClusterIDOf` assigns to that cluster. This is the parity check that actually matters: it guarantees the tokenization used for clustering is the same one we'll use to locate slot byte ranges. There is no need to reimplement drain3's tokenizer.
+### 13.7 `TestFieldRecoveryHarness` — the inference engine tracks the experts
+With the library and structured probes disabled, run the tiler over every text/positional golden case and score how much of the expert grok's high-information field structure it reconstructs (LCS over semantic field classes). The mean must stay ≥ 0.95. This is the regression gate that keeps unknown-format inference at expert level.
 
 ### 13.8 `TestCompileGrokRecursion` — circular references don't loop forever
 Pass an `extras` map where `A → B → A`. Assert `CompileGrok` returns an error rather than hanging.
@@ -1987,7 +1603,7 @@ Start with these 30 corpora. Each source-specific corpus should target coverage 
 27. `leef` — `structured:LEEF`.
 28. `suricata_eve` — `structured:Suricata EVE`.
 29. `zeek_tsv` — `structured:TSV` or source-specific Zeek entry.
-30. `weird_app` — no library match; must produce `drain`, coverage ≥ 0.85.
+30. `weird_app` — no library match; must produce `inferred:Tiled`, coverage ≥ 0.85.
 
 After the PoC, add one golden corpus for every row in the required catalog table. The library is only as good as the example coverage that protects it.
 
@@ -2109,14 +1725,13 @@ That's the entire CLI. Around fifty lines of substance. Resist the urge to add a
 ## 16. Build, Run, Ship
 
 ### `go.mod` (required)
-The repository must include a valid module file so external suites can import `pkg/log2grok`. `go.mod` requires a real semver — `latest` is not legal syntax. Pin a specific version of drain3, then bump it when needed via `go get -u github.com/axiomhq/drain3@<version>`.
+The repository must include a valid module file so external suites can import `pkg/log2grok`. `go.mod` requires a real semver — `latest` is not legal syntax.
 
 ```
 module log2grok
 
 go 1.22
 
-require github.com/axiomhq/drain3 v0.0.0-20240501000000-000000000000
 ```
 
 Replace the `v0.0.0-...` placeholder with whatever `go mod tidy` resolves (typically a `v0.x.y` tag or a pseudo-version of the latest commit). Verify in CI by running `go mod verify` and `go build ./...` against a clean module cache.
@@ -2167,11 +1782,11 @@ ok  	log2grok/...	0.142s
 - **Library / KnownPatterns** — our built-in dictionary of well-known log formats (Nginx, Syslog, etc.).
 - **Structured probe** — a detector/renderer for syntax-defined formats such as JSON, logfmt, CEF, LEEF, W3C/IIS, CSV, and TSV.
 - **Specificity** — a library tie-break score. A source-specific parser has high specificity; a generic timestamp parser has low specificity.
-- **Drain** — an algorithm that clusters log lines by structural similarity. We use the implementation in `axiomhq/drain3`.
-- **Cluster / template** — a group of log lines that share the same structure, with variable values replaced by `<*>`. Drain's output.
-- **Slot** — a `<*>` position in a Drain template. Each slot maps to a byte range in the sample line.
+- **Tiler** — the from-scratch inference engine: structure from one template line, types voted by the population.
+- **Shape / template line** — a group of log lines that share the same literal skeleton, represented by one sample line.
+- **Slot** — a token or quoted-region position in a template line whose observed values are collected by the alignment probe.
 - **Coverage** — the fraction of input lines that the chosen Grok pattern matches. Reported in the comment after the pattern.
-- **Sample line** — one representative line from the input that the chosen pattern is built around. In the library path the field is left empty (the pattern wasn't built from a specific line). In the Drain path it's the first line that belongs to the dominant cluster, exposed on `DiscoveredPattern.SampleLine`.
+- **Sample line** — one representative line from the input that the chosen pattern is built around. In the library path the field is left empty (the pattern wasn't built from a specific line). In the inference path it's the template line the pattern was built from, exposed on `DiscoveredPattern.SampleLine`.
 - **Anchored regex** — a regex that must match the whole string (with `^` at the start and `$` at the end). All our compiled regexes are anchored.
 
 ---
@@ -2184,17 +1799,17 @@ Probably one of:
 - A PCRE feature Go's RE2 doesn't support: atomic groups `(?>...)`, possessive quantifiers `++` `*+`, lookbehind `(?<=...)`. Rewrite without them.
 - An unbalanced bracket. Check carefully — it's almost always this.
 
-### Q: Drain produces a pattern but it's bad. What do I do?
+### Q: The tiler produces a pattern but it's bad. What do I do?
 Three options:
-1. Lower `-threshold` so the library wins more often (less aggressive Drain).
+1. Lower `-threshold` so the library wins more often (less aggressive inference).
 2. Add a library entry for the format you're seeing.
-3. Tune the similarity threshold in `drain_backend.go` (lower = more clusters; higher = fewer, broader clusters).
+3. Inspect the engine's choice with `TILE_DUMP=<case> go test -run TestTileDump -v`, then add a composite/primitive or a library entry.
 
 ### Q: A library pattern matches some lines but not others. Why?
-Because the threshold isn't met. Check `-verbose` to see what coverage each library entry got. If your file has multiple log shapes mixed, no single library entry will match all of them, and that's expected. Either filter the file or accept the Drain fallback.
+Because the threshold isn't met. Check `-verbose` to see what coverage each library entry got. If your file has multiple log shapes mixed, no single library entry will match all of them, and that's expected. Either filter the file, accept the inferred pattern/union, or use `--multi`.
 
 ### Q: Can this really match 99% of all logs?
-It should match ≥ 99% of lines for common, single-format corpora that are covered by the library or structured probes. It cannot guarantee 99% for files that mix unrelated formats, contain multi-line records, or use source-specific options we have never seen. For those, the requirement is still useful output: one pattern, truthful coverage, and a clear source label (`library:*`, `structured:*`, `drain`, or `fallback`).
+It should match ≥ 99% of lines for common, single-format corpora that are covered by the library or structured probes. It cannot guarantee 99% for files that mix unrelated formats, contain multi-line records, or use source-specific options we have never seen. For those, the requirement is still useful output: one pattern, truthful coverage, and a clear source label (`library:*`, `structured:*`, `inferred:*`, or `fallback`).
 
 ### Q: Why not just return `%{GREEDYDATA:message}` and get 100%?
 Because matching is not the same as parsing. `%{GREEDYDATA}` is only allowed as the final fallback or as a message tail after useful fields have already been extracted.
@@ -2223,7 +1838,7 @@ Read both carefully. If the pattern Discover produced is genuinely correct (it m
 2. Done. `TestLibraryCompiles` will tell you if any library entry now references it incorrectly.
 
 ### Q: What if `Discover` returns the wrong pattern entirely?
-Run with `-verbose` to see what was tried. If a library entry that *should* have matched didn't, check whether its primitives are too strict. If Drain produced something weird, look at the similarity threshold in `drain_backend.go`. Failing all that, add the format to the library — it's the most predictable fix.
+Run with `-verbose` to see what was tried. If a library entry that *should* have matched didn't, check whether its primitives are too strict. If the tiler produced something weird, inspect it with `TILE_DUMP`. Failing all that, add the format to the library — it's the most predictable fix.
 
 ---
 

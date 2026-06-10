@@ -138,7 +138,7 @@ func TestDiscoverMultiGainFloor(t *testing.T) {
 	}
 }
 
-func TestDiscoverMultiDoesNotReturnLiteralDrainOneOffs(t *testing.T) {
+func TestDiscoverMultiDoesNotReturnLiteralOneOffs(t *testing.T) {
 	lines := []string{
 		`connection refused by db-primary at shard 7`,
 		`cache warmed for tenant acme with 423 entries`,
@@ -154,7 +154,7 @@ func TestDiscoverMultiDoesNotReturnLiteralDrainOneOffs(t *testing.T) {
 		t.Fatalf("got %d patterns, want one safe fallback", len(res.Patterns))
 	}
 	p := res.Patterns[0]
-	if p.SourceFamily == "drain" {
+	if p.SourceFamily == "inferred" {
 		t.Fatalf("source = %q, want fallback", p.Source)
 	}
 	if strings.Contains(p.Grok, "connection refused") || strings.Contains(p.Grok, "|(?:cache warmed") {

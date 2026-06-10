@@ -6,7 +6,7 @@ Companion to `SPEC.md`. SPEC describes *what* the tool does. This doc describes 
 
 Entry: `pkg/log2grok/api.go` → `internal/pattern.Discover()` (`internal/pattern/discovery.go:35`).
 
-`Discover` runs three stages in order. Each stage may auto-accept (return immediately on high coverage), otherwise it contributes a candidate and the best across stages wins. Final fallback is a fixed safe pattern.
+`Discover` runs three stages concurrently, read in priority order. Each stage may auto-accept (return immediately on high coverage), otherwise it contributes a candidate and the best across stages wins. Final fallback is a fixed safe pattern.
 
 ```
 input lines
@@ -18,18 +18,18 @@ normalizeLines  ── strip BOM (byte order marks), drop blanks
 chooseSample    ── first 1024 + stratified sample, cap 4096
    │
    ├─► tryStructured  (probes: JSON variants, logfmt, CEF/LEEF, W3C/IIS, CSV, TSV)
-   │       coverage ≥ 0.90  → return
+   │       coverage ≥ threshold  → return
    │
    ├─► tryLibrary     (regex KnownPatterns, scored on sample then full)
    │       coverage ≥ threshold (default 0.85) → return
    │
-   ├─► deriveFromDrain (drain3 clustering → token classifier → render)
-   │       coverage ≥ 0.85 → return
+   ├─► tryTiling + tryTextEnvelope  (from-scratch inference for unknown formats)
+   │       coverage ≥ threshold → return
    │
    └─► best-of-stages, else deriveSafeFallback
 ```
 
-Cross-stage tie-break: `pickBetter` (`discovery.go:89`) — match count, then typed-capture count (non-`GREEDYDATA`, non-blank field), then family rank (`library < structured < drain < fallback`).
+Cross-stage tie-break: `pickBetter` (`discovery.go`) — match count, then typed-capture count (non-`GREEDYDATA`, non-blank field), then family rank (`library < structured < inferred < fallback`).
 
 ## 2. The Three Stages in Detail
 
@@ -64,11 +64,56 @@ Scoring (`scoreLibraryOnSample` + `betterCandidate`, `score.go`):
 
 Each `KnownPattern` may declare `CustomPatterns` (a private primitive map). `Discover` propagates these to the returned `DiscoveredPattern`; callers pass them to `CompileGrok`.
 
-### 2.3 Drain (`drain.go`, `drain_backend.go`, `tokenize.go`, `classify.go`, `render.go`)
+### 2.3 Inferred (`tiler.go`, `text_envelope.go`)
 
-`drain3` clusters lines by template. Wildcard slots (`<*>`) are typed by `classify.go` (timestamp / IP / int / etc.) and rendered back into a Grok pattern by `render.go`.
+The tiler is the from-scratch inference engine for formats the library does
+not know. Its core principle: **structure comes from one template line;
+semantics come from the population.**
 
-`drainBackend` is an interface so tests can substitute a fake. Default uses `axiomhq/drain3`.
+1. **Segment** a representative line into units: literal delimiter runs,
+   quoted regions, multi-token composite timestamps (`tileComposites` — each
+   is a hand recogniser plus the Grok expression rendered for the span), and
+   plain tokens.
+2. **Probe** the whole sample with a relaxed alignment regex (every token
+   becomes `(\S+)`, every quoted region `"([^"]*)"`) and collect each slot's
+   observed value set.
+3. **Type** each slot by voting the most specific primitive
+   (`tileSingleSpecs`, derived from the real Grok primitives so classifier
+   and renderer can never disagree) that matches *all* observed values.
+   Constant keywords demote to literals; constant *data* does not — a slot
+   that matches a high-confidence (Promote) type, or whose values share an
+   internal `:/​#@` separator signature with at least one high-confidence
+   column (`192.0.1.1:443`, `0/0/1/2/3`, `HTTP/1.1`), stays typed. A slot
+   that is sometimes `-` gets a dash alternation `(?:%{INT:bytes}|-)`.
+   Quoted regions are tiled recursively when their inner structure is stable
+   across the sample, else they become `%{DATA}`. A grammar rule types the
+   token after a leading RFC3164/RFC5424 timestamp as `%{HOSTNAME:hostname}`.
+4. **Brute-force** over up to 16 template lines (deduped by char-class
+   skeleton), score each tiling on the full input, keep the best — then try
+   relaxing the tail into `%{GREEDYDATA:message}` at successive field
+   boundaries (`relaxTail`) and keep the relaxation only when it buys real
+   coverage (varied message tails).
+
+Honesty gates (`tilingMinLines`, `tilingMinCoverage`, `tilingMinPromoted`)
+keep the tiler from overfitting tiny or heterogeneous inputs.
+`TestFieldRecoveryHarness` (`recovery_harness_test.go`) measures the engine:
+with library and structured probes disabled, it scores how much of the
+expert-written golden grok's field structure the engine reconstructs
+(LCS over high-information field classes). Inspect individual cases with
+`TILE_DUMP=case1,case2 go test -run TestTileDump -v`.
+
+`tryTextEnvelope` is a cheap fixed-shape probe (timestamp + level +
+component + message) kept alongside the tiler; the better of the two is the
+stage candidate.
+
+### 2.4 Drain (removed)
+
+The original stage 4 — `drain3` clustering with per-token slot typing — was
+removed after the tiler made it redundant: on the golden corpus the tiler
+recovers 0.999 of the experts' field structure where drain managed 0.238
+(134 wins, 0 losses, 1 tie), and the tiler's per-shape probes subsume
+drain's clustering in both `Discover` (shape unions) and `DiscoverMulti`
+(one candidate per shape). The `axiomhq/drain3` dependency is gone.
 
 ## 3. The Pattern DSL
 
@@ -186,9 +231,10 @@ Cases are committed source-of-truth. Edit them directly — no generator. A hand
 | `internal/pattern/config.go` | `LoadConfig`/`ResetConfig` — disk overlay seed/load/recover. |
 | `internal/pattern/primitives.go` | `GrokPrimitives` declaration (loaded from `embedded/primitives.json`). |
 | `internal/pattern/compile.go` | `CompileGrok` — `%{}` expansion + anchored RE2 compile. |
-| `internal/pattern/drain.go` | Drain3 wrapper, cluster→template extraction. |
-| `internal/pattern/classify.go` | Slot type inference (timestamp / IP / int / …). |
-| `internal/pattern/render.go` | Drain template + slots → final Grok string. |
+| `internal/pattern/tiler.go` | From-scratch inference: segment → probe → population-vote typing → render. |
+| `internal/pattern/text_envelope.go` | Fixed-shape timestamp/level/component probe. |
+| `internal/pattern/recovery_harness_test.go` | Field-recovery measurement vs the expert golden groks. |
+| `internal/pattern/naming.go` | Field-name canonicalisation shared by the inference engine. |
 | `internal/pattern/coverage.go` | `EvaluateCoverage` — anchored regex against full input. |
 | `test/benchmark/` | Golden corpus + benchmarks. |
 | `cmd/log2grok/` | CLI entrypoint. |
@@ -198,7 +244,7 @@ Cases are committed source-of-truth. Edit them directly — no generator. A hand
 
 - **Pattern built but doesn't match**: most often `TIMESTAMP_ISO8601` or `HTTPDATE` not consuming a trailing token. Inspect the literal regex with `CompileGrok(pattern, nil).String()` and walk it against an input line.
 - **Library entry never wins**: another entry has same/higher specificity *and* matches the same lines. Either bump your specificity or narrow the competitor's regex.
-- **Drain output regresses after adding a primitive**: extending a primitive (e.g. `LOGLEVEL`) widens every entry that uses it. Run `make bench` and `go test ./...` after primitive edits.
+- **Tiler output regresses after adding a primitive**: extending a primitive (e.g. `LOGLEVEL`) widens every entry and classifier that uses it. Run `make bench` and `go test ./...` after primitive edits.
 - **`make lint` fails on `gofmt`**: run `gofmt -w internal/pattern/<file>.go`.
 - **Build error in `test/benchmark`**: the test imports `internal/pattern` directly; struct shape changes there propagate. Don't rename exported fields without updating both.
 

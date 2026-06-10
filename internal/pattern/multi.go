@@ -91,13 +91,9 @@ func DiscoverMulti(lines []string, opts Options) (*MultiPatternResult, error) {
 		evalSet = chooseSample(full, coverageEvalCap)
 		estimated = true
 	}
-	drainSet := full
-	if total > drainTrainCap {
-		drainSet = chooseSample(full, drainTrainCap)
-	}
 	sample := chooseSample(full, 4096)
 
-	pool := buildMultiCandidates(sample, evalSet, drainSet, diag)
+	pool := buildMultiCandidates(sample, evalSet, diag)
 	if len(pool) == 0 {
 		// Nothing informative to union; defer to the single-pattern path
 		// (which still has its own fallback) so callers always get an answer.
@@ -146,12 +142,12 @@ func DiscoverMulti(lines []string, opts Options) (*MultiPatternResult, error) {
 }
 
 // buildMultiCandidates assembles the selection pool: specific library
-// matches (named, vendor-recognized), a structured probe if one fits, and
-// every drain cluster rendered into its own pattern. Generic catchalls and
-// the keyless JSON skeleton are excluded so the greedy selector is forced
-// to pick informative shapes. Each candidate carries its match bitmap over
-// evalSet; zero-match candidates are dropped.
-func buildMultiCandidates(sample, evalSet, drainSet []string, diag io.Writer) []*multiCandidate {
+// matches (named, vendor-recognized), a structured probe if one fits, the
+// text-envelope probe, and one tiled pattern per distinct line shape.
+// Generic catchalls and the keyless JSON skeleton are excluded so the greedy
+// selector is forced to pick informative shapes. Each candidate carries its
+// match bitmap over evalSet; zero-match candidates are dropped.
+func buildMultiCandidates(sample, evalSet []string, diag io.Writer) []*multiCandidate {
 	var pool []*multiCandidate
 	seen := make(map[string]bool)
 
@@ -196,36 +192,28 @@ func buildMultiCandidates(sample, evalSet, drainSet []string, diag io.Writer) []
 		}
 	}
 
-	// Drain: every cluster rendered into its own pattern.
-	if clusters, err := trainDrain(drainSet); err == nil {
-		for _, cl := range clusters {
-			if cl.LineCount < drainMultiMinBranchLines {
-				continue
-			}
-			grok, ok := renderCluster(cl, drainSet)
-			if !ok {
-				continue
-			}
-			if !usefulDrainGrok(grok) {
-				continue
-			}
-			re, err := CompileGrok(grok, nil)
-			if err != nil {
-				continue
-			}
-			dp := &DiscoveredPattern{
-				Source:       fmt.Sprintf("drain:cluster-%d", cl.ID),
-				SourceFamily: "drain",
-				Grok:         grok,
-				SampleLine:   drainSet[cl.SampleLineIdx],
-			}
-			add(dp, re, familyRank("drain"), typedCaptureCount(grok), 0)
-			if len(pool) >= 128 {
-				break
-			}
+	// Text envelope: the fast fixed-shape inference probe.
+	if e := tryTextEnvelope(sample, evalSet, io.Discard); e != nil {
+		if re, err := CompileGrok(e.Grok, e.CustomPatterns); err == nil {
+			add(e, re, familyRank("inferred"), typedCaptureCount(e.Grok), 0)
 		}
-	} else {
-		fmt.Fprintf(diag, "multi: drain unavailable: %v\n", err)
+	}
+
+	// Tiler: one pattern per distinct line shape — the engine's clustering.
+	// A shape must explain at least two lines and carry a high-confidence
+	// field; that keeps literal one-off lines out of the pool.
+	for i, c := range tileShapes(sample, evalSet, tileShapeTemplates) {
+		if c.Matched < tiledUnionMinBranchLines || c.Promoted < tilingMinPromoted {
+			continue
+		}
+		dp := &DiscoveredPattern{
+			Source:       fmt.Sprintf("inferred:tile-%d", i+1),
+			SourceFamily: "inferred",
+			Grok:         c.Grok,
+		}
+		if re, err := CompileGrok(c.Grok, nil); err == nil {
+			add(dp, re, familyRank("inferred"), typedCaptureCount(c.Grok), 0)
+		}
 	}
 
 	return pool
@@ -236,7 +224,7 @@ func buildMultiCandidates(sample, evalSet, drainSet []string, diag io.Writer) []
 // still-uncovered lines until the target fraction is reached, the pattern
 // cap is hit, or no candidate adds anything. Ties in marginal gain break
 // toward the more informative candidate (specific library < structured <
-// drain, then more typed captures, then higher specificity), with pool
+// inferred, then more typed captures, then higher specificity), with pool
 // order as the final deterministic tiebreak.
 func greedyCover(pool []*multiCandidate, nEval int, target float64, diag io.Writer) ([]*multiCandidate, int) {
 	covered := make([]bool, nEval)
@@ -294,7 +282,7 @@ func greedyCover(pool []*multiCandidate, nEval int, target float64, diag io.Writ
 
 // preferMultiCandidate reports whether a should beat b when their marginal
 // gains tie. Lower family rank wins (specific library beats structured
-// beats drain), then more typed captures, then higher specificity.
+// beats inferred), then more typed captures, then higher specificity.
 func preferMultiCandidate(a, b *multiCandidate) bool {
 	if a.familyRank != b.familyRank {
 		return a.familyRank < b.familyRank

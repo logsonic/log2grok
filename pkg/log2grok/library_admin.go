@@ -50,10 +50,7 @@ func ConfigDir() string {
 func ListLibrary() []KnownPattern {
 	adminMu.Lock()
 	defer adminMu.Unlock()
-	src := pattern.KnownPatternsLibrary
-	out := make([]KnownPattern, len(src))
-	copy(out, src)
-	return out
+	return pattern.KnownPatternsLibrarySnapshot()
 }
 
 // UpsertLibraryEntry inserts a new entry, or replaces an existing one
@@ -95,9 +92,10 @@ func UpsertLibraryEntry(kp KnownPattern) (*KnownPattern, error) {
 	}
 
 	var replaced *KnownPattern
-	updated := make([]KnownPattern, 0, len(pattern.KnownPatternsLibrary)+1)
+	src := pattern.KnownPatternsLibrarySnapshot()
+	updated := make([]KnownPattern, 0, len(src)+1)
 	swapped := false
-	for _, existing := range pattern.KnownPatternsLibrary {
+	for _, existing := range src {
 		if existing.Name == kp.Name {
 			prev := existing
 			replaced = &prev
@@ -114,8 +112,7 @@ func UpsertLibraryEntry(kp KnownPattern) (*KnownPattern, error) {
 	if err := persistPatterns(dir, updated); err != nil {
 		return nil, err
 	}
-	pattern.KnownPatternsLibrary = updated
-	pattern.RefreshLibrary()
+	pattern.ReplaceKnownPatternsLibrary(updated)
 	return replaced, nil
 }
 
@@ -135,9 +132,10 @@ func RemoveLibraryEntry(name string) (bool, error) {
 		return false, ErrConfigNotLoaded
 	}
 
-	updated := make([]KnownPattern, 0, len(pattern.KnownPatternsLibrary))
+	src := pattern.KnownPatternsLibrarySnapshot()
+	updated := make([]KnownPattern, 0, len(src))
 	removed := false
-	for _, existing := range pattern.KnownPatternsLibrary {
+	for _, existing := range src {
 		if existing.Name == name {
 			removed = true
 			continue
@@ -151,8 +149,7 @@ func RemoveLibraryEntry(name string) (bool, error) {
 	if err := persistPatterns(dir, updated); err != nil {
 		return false, err
 	}
-	pattern.KnownPatternsLibrary = updated
-	pattern.RefreshLibrary()
+	pattern.ReplaceKnownPatternsLibrary(updated)
 	return true, nil
 }
 
@@ -161,11 +158,7 @@ func RemoveLibraryEntry(name string) (bool, error) {
 func ListPrimitives() map[string]string {
 	adminMu.Lock()
 	defer adminMu.Unlock()
-	out := make(map[string]string, len(pattern.GrokPrimitives))
-	for k, v := range pattern.GrokPrimitives {
-		out[k] = v
-	}
-	return out
+	return pattern.GrokPrimitivesSnapshot()
 }
 
 // UpsertPrimitive inserts or replaces a primitive entry. The regex body
@@ -197,9 +190,10 @@ func UpsertPrimitive(name, body string) (string, error) {
 	// Build a candidate map (clone + overlay) and validate that
 	// referenced primitives still expand. We reach into the live
 	// primitives map briefly to do this check before commit.
-	previous, existed := pattern.GrokPrimitives[name]
-	candidate := make(map[string]string, len(pattern.GrokPrimitives)+1)
-	for k, v := range pattern.GrokPrimitives {
+	active := pattern.GrokPrimitivesSnapshot()
+	previous, existed := active[name]
+	candidate := make(map[string]string, len(active)+1)
+	for k, v := range active {
 		candidate[k] = v
 	}
 	candidate[name] = body
@@ -207,9 +201,7 @@ func UpsertPrimitive(name, body string) (string, error) {
 	if err := persistPrimitives(dir, candidate); err != nil {
 		return "", err
 	}
-	pattern.GrokPrimitives = candidate
-	pattern.GrokPrimitivesOverrides = candidate
-	pattern.RefreshLibrary()
+	pattern.ReplaceGrokPrimitives(candidate)
 
 	if existed {
 		return previous, nil
@@ -232,12 +224,13 @@ func RemovePrimitive(name string) (bool, error) {
 		return false, ErrConfigNotLoaded
 	}
 
-	if _, ok := pattern.GrokPrimitives[name]; !ok {
+	active := pattern.GrokPrimitivesSnapshot()
+	if _, ok := active[name]; !ok {
 		return false, nil
 	}
 
-	candidate := make(map[string]string, len(pattern.GrokPrimitives))
-	for k, v := range pattern.GrokPrimitives {
+	candidate := make(map[string]string, len(active))
+	for k, v := range active {
 		if k == name {
 			continue
 		}
@@ -247,9 +240,7 @@ func RemovePrimitive(name string) (bool, error) {
 	if err := persistPrimitives(dir, candidate); err != nil {
 		return false, err
 	}
-	pattern.GrokPrimitives = candidate
-	pattern.GrokPrimitivesOverrides = candidate
-	pattern.RefreshLibrary()
+	pattern.ReplaceGrokPrimitives(candidate)
 	return true, nil
 }
 

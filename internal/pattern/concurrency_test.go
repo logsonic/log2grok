@@ -7,10 +7,11 @@ import (
 )
 
 // TestConcurrentDiscoverNoRace runs many overlapping Discover and
-// DiscoverMulti calls in parallel. It guards against the shared-drain-
+// DiscoverMulti calls in parallel. It guards against shared-state
 // backend race: a higher-priority stage can auto-accept and return while
-// the drain goroutine is still training in the background, so independent
-// calls can have overlapping drain work. Run with -race to be meaningful.
+// lower-priority stage goroutines may still be running in the background,
+// so independent calls can have overlapping work. Run with -race to be
+// meaningful.
 func TestConcurrentDiscoverNoRace(t *testing.T) {
 	inputs := [][]string{
 		genConcNginx(60),

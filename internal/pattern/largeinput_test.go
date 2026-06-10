@@ -9,11 +9,11 @@ import (
 // withCaps temporarily lowers the sampling caps so large-input behavior
 // can be exercised without generating millions of lines, restoring the
 // originals when the test finishes.
-func withCaps(t *testing.T, evalCap, drainCap int) {
+func withCaps(t *testing.T, evalCap int) {
 	t.Helper()
-	oe, od := coverageEvalCap, drainTrainCap
-	coverageEvalCap, drainTrainCap = evalCap, drainCap
-	t.Cleanup(func() { coverageEvalCap, drainTrainCap = oe, od })
+	oe := coverageEvalCap
+	coverageEvalCap = evalCap
+	t.Cleanup(func() { coverageEvalCap = oe })
 }
 
 func genNginxLines(n int) []string {
@@ -31,7 +31,7 @@ func genNginxLines(n int) []string {
 // and MatchedCount is extrapolated to the full total while the Grok stays
 // exact.
 func TestLargeInputEstimatesCoverage(t *testing.T) {
-	withCaps(t, 2000, 1000)
+	withCaps(t, 2000)
 	const n = 20000
 	lines := genNginxLines(n)
 
@@ -101,8 +101,8 @@ func TestMultiPatternUnion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if !strings.HasPrefix(dp.Source, "drain:multi(") {
-		t.Fatalf("source = %q, want a drain:multi union", dp.Source)
+	if !strings.HasPrefix(dp.Source, "inferred:multi(") {
+		t.Fatalf("source = %q, want an inferred:multi union", dp.Source)
 	}
 	if dp.Coverage < 0.99 {
 		t.Fatalf("union coverage = %.3f, want ~1.0", dp.Coverage)

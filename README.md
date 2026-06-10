@@ -95,8 +95,8 @@ lines and each subsequent one explains the most of what remained. How it
 works:
 
 - **Candidate pool** = specific library matches (named, vendor-recognized)
-  + a structured probe if one fits + every drain cluster rendered into its
-  own pattern. The library's generic catchall tier is excluded so a
+  + a structured probe if one fits + one inferred (tiled) pattern per
+  distinct line shape. The library's generic catchall tier is excluded so a
   "timestamp + GREEDYDATA" rule can't win by matching everything.
 - **Greedy selection** repeatedly takes the pattern explaining the most
   still-uncovered lines, stopping when the target is met, when a pattern
@@ -126,9 +126,9 @@ handles 1M+ line multi-format files within the same bounded cost as
 |-------|--------|-----------------------|
 | 1. Structured | `tryStructured` — JSON / logfmt / CEF / W3C / CSV / TSV probes | `coverage ≥ LibraryThreshold` *and* a typed capture (skips the keyless JSON skeleton) |
 | 2. Library | `tryLibrary` — curated + bundled regex `KnownPatterns`, sample-then-full scoring | `coverage ≥ LibraryThreshold` (default `0.85`) |
-| 3. Drain | `deriveFromDrain` — drain3 clustering → token classifier → render. When the dominant cluster is a poor fit but the input is made of fewer than ~10 distinct shapes, the top clusters are unioned into one alternation (`drain:multi(N)`) | `coverage ≥ 0.85` |
+| 3. Inferred | `tryTiling` + `tryTextEnvelope` — from-scratch inference: segment a template line, probe the population, vote types per slot. When no single shape fits but the input is fewer than ~10 distinct shapes, complementary shapes are unioned into one alternation (`inferred:multi(N)`) | `coverage ≥ 0.85` |
 
-If no stage auto-accepts, `pickBetter` picks the best candidate across stages (matched count → typed-capture count → family rank `library < structured < drain < fallback`). If every stage produced zero matches, `deriveSafeFallback` returns a generic skeleton.
+If no stage auto-accepts, `pickBetter` picks the best candidate across stages (matched count → typed-capture count → family rank `library < structured < inferred < fallback`). If every stage produced zero matches, `deriveSafeFallback` returns a generic skeleton.
 
 ### Stages explained (newcomer guide)
 
@@ -136,7 +136,7 @@ The three stages form a hierarchy of **how much we already knew about your log**
 
 - **Stage 1 (Structured)** — we know the **format spec** (JSON, CSV, …)
 - **Stage 2 (Library)** — we know the **vendor** (Nginx, syslog, AWS ALB, …)
-- **Stage 3 (Drain)** — we know **nothing** — figure it out from the data itself
+- **Stage 3 (Inferred)** — we know **nothing** — figure it out from the data itself
 
 #### Stage 1 — Structured
 
@@ -244,30 +244,30 @@ Now flip the input:
 
 ### Concurrency model
 
-The three stages run **in parallel**. Each stage runs in its own goroutine and writes its diagnostic output to a per-stage `bytes.Buffer`. The coordinator reads the result channels in **stage priority order** (structured → library → drain) and short-circuits the moment a higher-priority stage clears its auto-accept threshold:
+The three stages run **in parallel**. Each stage runs in its own goroutine and writes its diagnostic output to a per-stage `bytes.Buffer`. The coordinator reads the result channels in **stage priority order** (structured → library → inferred) and short-circuits the moment a higher-priority stage clears its auto-accept threshold:
 
 ```
        ┌─ structured goroutine ─┐
 input ─┼─ library    goroutine ─┼─► coordinator: read in priority order
-       └─ drain      goroutine ─┘                  • return on first auto-accept
+       └─ inferred   goroutine ─┘                  • return on first auto-accept
                                                    • else pickBetter across all three
 ```
 
-Auto-accept follows **stage priority, not finish order**. If structured auto-accepts, its result wins even when library and drain finished first; the coordinator simply returns without consuming their channels.
+Auto-accept follows **stage priority, not finish order**. If structured auto-accepts, its result wins even when library and inferred finished first; the coordinator simply returns without consuming their channels.
 
 Properties:
 
-- **Wall-clock latency**: in the no-auto-accept path, total time is `max(structured, library, drain)` instead of their sum.
+- **Wall-clock latency**: in the no-auto-accept path, total time is `max(structured, library, inferred)` instead of their sum.
 - **Diagnostics ordering**: per-stage buffers are flushed in priority order, so verbose output keeps the historical `stage1 → stage2 → stage3` shape regardless of which goroutine finished first.
 - **Determinism**: identical input always yields the same `DiscoveredPattern`. Goroutines do not race on shared state (each writes to its own buffer); the priority-order read is what fixes the result.
-- **No mid-flight cancellation**: drain3 has no cancellation hook, so when structured or library auto-accepts, the drain goroutine still finishes its work in the background. Result channels are buffered (capacity 1), so unread goroutines exit cleanly without leaking.
+- **No mid-flight cancellation**: when structured or library auto-accepts, the lower-priority goroutines still finish their work in the background. Result channels are buffered (capacity 1), so unread goroutines exit cleanly without leaking.
 
 This shape replaced the previous strictly serial `stage1 → stage2 → stage3` short-circuit chain. The public API (`Discover`, `DiscoveredPattern`, `Options`) and selection semantics are unchanged — only the execution overlap changed.
 
 ## Scaling to large inputs (1M+ lines)
 
 `Discover` accepts inputs of any size — there is no line-count cap. To keep
-cost bounded, the two stages whose work would otherwise grow with the input
+cost bounded, the work that would otherwise grow with the input
 operate on a deterministic representative sample once the input crosses a
 threshold:
 
@@ -275,9 +275,9 @@ threshold:
   scored against a fixed-size sample rather than every line. Because every
   candidate is scored on the *same* sample, the relative ranking — and thus
   the chosen pattern — is preserved.
-- **Drain training** (`drainTrainCap`, 20k): drain3 learns templates from a
-  bounded sample; templates converge well before this many lines, so feeding
-  more only grows memory and CPU.
+- **Inference sampling**: the tiler segments and probes against the same
+  bounded representative sample (cap 4096 for shape selection), so its cost
+  is independent of input size.
 
 The sample is chosen deterministically (`chooseSample`: a fixed head plus a
 strided tail), so identical input always yields an identical result.

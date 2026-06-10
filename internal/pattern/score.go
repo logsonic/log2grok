@@ -15,7 +15,7 @@ type compiledPattern struct {
 
 var (
 	compileMu       sync.Mutex
-	compileOnce     sync.Once
+	compiledVersion uint64
 	compiledLib     []compiledPattern
 	libraryDiagErrs []error
 )
@@ -26,7 +26,7 @@ var (
 func resetCompiledLibrary() {
 	compileMu.Lock()
 	defer compileMu.Unlock()
-	compileOnce = sync.Once{}
+	compiledVersion = 0
 	compiledLib = nil
 	libraryDiagErrs = nil
 }
@@ -34,24 +34,51 @@ func resetCompiledLibrary() {
 // compiledKnownPatterns returns library entries that compiled cleanly.
 // Compile errors are recorded in libraryDiagErrs.
 func compiledKnownPatterns() []compiledPattern {
-	compileOnce.Do(func() {
-		compiledLib = make([]compiledPattern, 0, len(KnownPatterns))
-		for _, kp := range KnownPatterns {
+	for {
+		version, patterns := knownPatternsSnapshotWithVersion()
+
+		compileMu.Lock()
+		if compiledLib != nil && compiledVersion == version {
+			out := append([]compiledPattern(nil), compiledLib...)
+			compileMu.Unlock()
+			return out
+		}
+		compileMu.Unlock()
+
+		compiled := make([]compiledPattern, 0, len(patterns))
+		var errs []error
+		for _, kp := range patterns {
 			re, err := CompileGrok(kp.Pattern, kp.CustomPatterns)
 			if err != nil {
-				libraryDiagErrs = append(libraryDiagErrs,
-					fmt.Errorf("library %q: %w", kp.Name, err))
+				errs = append(errs, fmt.Errorf("library %q: %w", kp.Name, err))
 				continue
 			}
-			compiledLib = append(compiledLib, compiledPattern{Pattern: kp, Regex: re})
+			compiled = append(compiled, compiledPattern{Pattern: kp, Regex: re})
 		}
-	})
-	return compiledLib
+
+		// If config changed while we were compiling, discard this snapshot and
+		// rebuild from the new version rather than publishing stale regexes.
+		if currentPatternStateVersion() != version {
+			continue
+		}
+
+		compileMu.Lock()
+		if compiledLib == nil || compiledVersion != version {
+			compiledVersion = version
+			compiledLib = compiled
+			libraryDiagErrs = errs
+		}
+		out := append([]compiledPattern(nil), compiledLib...)
+		compileMu.Unlock()
+		return out
+	}
 }
 
 // LibraryDiagnostics returns library-compile errors (cumulative).
 func LibraryDiagnostics() []error {
 	compiledKnownPatterns()
+	compileMu.Lock()
+	defer compileMu.Unlock()
 	out := make([]error, 0, len(libraryDiagErrs))
 	out = append(out, libraryDiagErrs...)
 	return out

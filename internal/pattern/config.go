@@ -25,6 +25,8 @@ var currentConfigDir string
 // active (either because the caller never called LoadConfig or because
 // the call failed before assigning).
 func CurrentConfigDir() string {
+	patternStateMu.RLock()
+	defer patternStateMu.RUnlock()
 	return currentConfigDir
 }
 
@@ -40,8 +42,9 @@ func CurrentConfigDir() string {
 //     is written in its place, and a warning is emitted to warn (when
 //     warn is non-nil). The embedded default is then used.
 //
-// After all files have been processed, RefreshLibrary is called so the
-// derived structures and compiled-library cache reflect the new contents.
+// After all files have been processed, the full primitives + patterns
+// snapshot is committed at once so concurrent discovery never observes a
+// half-loaded config.
 //
 // If dir is empty, DefaultConfigDirName under the current working
 // directory is used. The directory is created if missing.
@@ -53,17 +56,44 @@ func LoadConfig(dir string, warn io.Writer) error {
 		return fmt.Errorf("log2grok: create config dir %s: %w", dir, err)
 	}
 
-	// Process each file independently. A failure to parse is recovered
-	// with the embedded default; a failure to write is fatal because the
-	// user explicitly requested an externalized config.
+	var (
+		primitives map[string]string
+		library    []KnownPattern
+	)
 	for _, name := range allEmbeddedFiles {
-		if err := loadOrSeed(dir, name, warn); err != nil {
+		data, err := loadOrSeedBytes(dir, name, warn)
+		if err != nil {
 			return err
+		}
+		switch name {
+		case fileNamePrimitives:
+			primitives, err = decodePrimitives(data)
+		case fileNamePatterns:
+			library, err = decodePatterns(data)
+			FillEmptyDescriptionsInPlace(library)
+		default:
+			err = fmt.Errorf("unknown config file %q", name)
+		}
+		if err != nil {
+			path := filepath.Join(dir, name)
+			data, err = recoverWithBackupBytes(name, path, fmt.Errorf("parse %s: %w", name, err), warn)
+			if err != nil {
+				return err
+			}
+			switch name {
+			case fileNamePrimitives:
+				primitives, err = decodePrimitives(data)
+			case fileNamePatterns:
+				library, err = decodePatterns(data)
+				FillEmptyDescriptionsInPlace(library)
+			}
+			if err != nil {
+				return fmt.Errorf("log2grok: embedded %s failed to parse after recovery: %w", name, err)
+			}
 		}
 	}
 
-	currentConfigDir = dir
-	RefreshLibrary()
+	commitPatternState(primitives, library, &dir)
 	return nil
 }
 
@@ -91,78 +121,49 @@ func ResetConfig(dir string, warn io.Writer) error {
 			fmt.Fprintf(warn, "log2grok: reset %s from embedded default\n", path)
 		}
 	}
-	if err := loadEmbeddedDefaults(); err != nil {
+	primitives, library, err := embeddedDefaults()
+	if err != nil {
 		return err
 	}
-	currentConfigDir = dir
-	RefreshLibrary()
+	commitPatternState(primitives, library, &dir)
 	return nil
 }
 
-// loadOrSeed handles a single file according to the LoadConfig contract.
-// It updates the relevant package-level var on success.
-func loadOrSeed(dir, name string, warn io.Writer) error {
+// loadOrSeedBytes handles a single file according to the LoadConfig
+// contract and returns the bytes to parse. It does not mutate package state.
+func loadOrSeedBytes(dir, name string, warn io.Writer) ([]byte, error) {
 	path := filepath.Join(dir, name)
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		if werr := writeEmbeddedTo(name, path); werr != nil {
-			return fmt.Errorf("log2grok: seed %s: %w", path, werr)
+			return nil, fmt.Errorf("log2grok: seed %s: %w", path, werr)
 		}
-		data = mustReadEmbedded(name)
-		return applyConfigBytes(name, data)
+		return mustReadEmbedded(name), nil
 	}
 	if err != nil {
 		// A read error (permissions, I/O) is treated as corruption: back
 		// up whatever is there, re-seed, and continue.
-		return recoverWithBackup(name, path, fmt.Errorf("read: %w", err), warn)
+		return recoverWithBackupBytes(name, path, fmt.Errorf("read: %w", err), warn)
 	}
-	if perr := applyConfigBytes(name, data); perr != nil {
-		return recoverWithBackup(name, path, perr, warn)
-	}
-	return nil
+	return data, nil
 }
 
 // recoverWithBackup renames path to a timestamped .bak file, writes the
-// embedded default to path, applies the embedded default in memory, and
-// emits a warning. Returns any unrecoverable error.
-func recoverWithBackup(name, path string, cause error, warn io.Writer) error {
+// embedded default to path, emits a warning, and returns the embedded bytes.
+// Returns any unrecoverable error.
+func recoverWithBackupBytes(name, path string, cause error, warn io.Writer) ([]byte, error) {
 	backup, berr := backupFile(path)
 	if berr != nil && !errors.Is(berr, os.ErrNotExist) {
-		return fmt.Errorf("log2grok: backup %s: %w (original error: %v)", path, berr, cause)
+		return nil, fmt.Errorf("log2grok: backup %s: %w (original error: %v)", path, berr, cause)
 	}
 	if werr := writeEmbeddedTo(name, path); werr != nil {
-		return fmt.Errorf("log2grok: re-seed %s: %w (original error: %v)", path, werr, cause)
+		return nil, fmt.Errorf("log2grok: re-seed %s: %w (original error: %v)", path, werr, cause)
 	}
 	if warn != nil {
 		fmt.Fprintf(warn, "log2grok: %s was corrupt (%v); backed up to %s, restored embedded default\n",
 			path, cause, backup)
 	}
-	return applyConfigBytes(name, mustReadEmbedded(name))
-}
-
-// applyConfigBytes parses data for the file kind named by name and stores
-// it into the corresponding package-level var. It does not call
-// RefreshLibrary; the caller is responsible.
-func applyConfigBytes(name string, data []byte) error {
-	switch name {
-	case fileNamePrimitives:
-		v, err := decodePrimitives(data)
-		if err != nil {
-			return fmt.Errorf("parse %s: %w", name, err)
-		}
-		GrokPrimitives = v
-		GrokPrimitivesOverrides = GrokPrimitives
-	case fileNamePatterns:
-		v, err := decodePatterns(data)
-		if err != nil {
-			return fmt.Errorf("parse %s: %w", name, err)
-		}
-		FillEmptyDescriptionsInPlace(v)
-		KnownPatternsLibrary = v
-	default:
-		return fmt.Errorf("unknown config file %q", name)
-	}
-	return nil
+	return mustReadEmbedded(name), nil
 }
 
 // writeEmbeddedTo writes the embedded default for name to path with mode

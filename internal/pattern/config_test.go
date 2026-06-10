@@ -201,6 +201,5 @@ func restoreEmbeddedDefaults(t *testing.T) func() {
 		if err := loadEmbeddedDefaults(); err != nil {
 			t.Fatalf("restore embedded defaults: %v", err)
 		}
-		RefreshLibrary()
 	}
 }

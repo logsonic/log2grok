@@ -23,7 +23,9 @@ var logstashNamedGroupRe = regexp.MustCompile(`\(\?<(\w+)>`)
 // as an anchored Go regexp. Anchoring is automatic.
 func CompileGrok(pattern string, extras map[string]string) (*regexp.Regexp, error) {
 	used := make(map[string]int)
+	patternStateMu.RLock()
 	expanded, err := expandGrok(pattern, extras, used, 0)
+	patternStateMu.RUnlock()
 	if err != nil {
 		return nil, err
 	}

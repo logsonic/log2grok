@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"regexp"
 	"strings"
 )
 
@@ -57,13 +56,7 @@ var ErrEmptyInput = errors.New("log2grok: no non-empty input lines")
 //     against when estimating coverage. The estimate is unbiased because
 //     every candidate is scored on the *same* sample, so their relative
 //     ranking is preserved.
-//   - drainTrainCap bounds how many lines are fed to drain3 for template
-//     learning. Templates converge well before this many lines; feeding
-//     more only grows memory and CPU.
-var (
-	coverageEvalCap = 50000
-	drainTrainCap   = 20000
-)
+var coverageEvalCap = 50000
 
 // Discover returns the single best Grok pattern for the input lines.
 func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
@@ -85,43 +78,35 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 	full := normalized.MatchLines
 	total := len(full)
 
-	// evalSet is what coverage is measured against; drainSet is what drain
-	// trains on. For inputs at or below the caps these are the full slice
-	// and behavior is bit-for-bit identical to the unsampled path.
+	// evalSet is what coverage is measured against. For inputs at or below
+	// the cap it is the full slice and behavior is bit-for-bit identical to
+	// the unsampled path.
 	evalSet := full
 	estimated := false
 	if total > coverageEvalCap {
 		evalSet = chooseSample(full, coverageEvalCap)
 		estimated = true
 	}
-	drainSet := full
-	if total > drainTrainCap {
-		drainSet = chooseSample(full, drainTrainCap)
-	}
 
 	sample := chooseSample(full, 4096)
 
 	// All three stages run concurrently. Each writes its diagnostics to a
-	// per-stage buffer so the merged output preserves the historical
-	// stage1→stage2→stage3 ordering regardless of completion order.
+	// per-stage buffer so the merged output preserves stage-priority
+	// ordering regardless of completion order.
 	//
-	// Auto-accept follows stage priority (structured > library > drain),
+	// Auto-accept follows stage priority (structured > library > inferred),
 	// not finish order: we read results in priority order and short-circuit
 	// the moment a higher-priority stage clears its threshold. Lower-priority
 	// goroutines still run to completion in the background — their channels
-	// are buffered so they exit cleanly without being read. drain3 has no
-	// in-flight cancellation hook, so this is the most we can do.
-	// Buffered (capacity 1) so a goroutine whose result the coordinator
-	// never reads — e.g. drain when structured auto-accepts — still
-	// completes its send and exits cleanly.
+	// are buffered (capacity 1) so they exit cleanly without being read.
 	structuredCh := make(chan stageResult, 1)
 	libraryCh := make(chan stageResult, 1)
-	drainCh := make(chan stageResult, 1)
+	envelopeCh := make(chan stageResult, 1)
 
 	// Stage 1 — structured log formats such as (JSON / logfmt / CEF / W3C / CSV / TSV).
 	// Auto-accepts only when the candidate has at least one typed capture,
 	// which excludes the keyless JSON skeleton (\{%{GREEDYDATA:json}\}) so
-	// it can't pre-empt the more informative library/drain stages.
+	// it can't pre-empt the more informative library/inferred stages.
 	go func() {
 		var buf bytes.Buffer
 		dp := tryStructured(sample, evalSet, &buf)
@@ -144,23 +129,21 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 		libraryCh <- stageResult{candidate: dp, autoAccept: accept, diag: &buf}
 	}()
 
-	// Stage 3 — drain: drain3 clustering → token classifier → renderer.
-	// The most expensive stage and not interruptible (drain3 has no
-	// cancellation hook), so this goroutine always runs to completion
-	// even when a higher-priority stage has already auto-accepted.
+	// Stage 3 — inferred shapes: the brute-force primitive tiler and the
+	// text-envelope probe. Both reconstruct a Grok from scratch by typing
+	// the line's tokens; the tiler is the general case (population-voted
+	// tiling, sub-token recovery, shape unions) and the envelope is a fast
+	// timestamp/level/component template. We keep the better of the two.
+	// This stage sits after the curated library so known vendor/framework
+	// patterns keep priority.
 	go func() {
 		var buf bytes.Buffer
-		dp, err := deriveFromDrain(drainSet, evalSet, &buf)
-		if err != nil {
-			fmt.Fprintf(&buf, "stage3 drain error: %v\n", err)
-			drainCh <- stageResult{diag: &buf}
-			return
-		}
-		accept := dp != nil && dp.Grok != "" && dp.Coverage >= drainAutoAcceptCoverage
+		dp := pickBetter(tryTiling(sample, evalSet, &buf), tryTextEnvelope(sample, evalSet, &buf))
+		accept := dp != nil && dp.Coverage >= threshold
 		if accept {
-			fmt.Fprintf(&buf, "stage3 drain auto-accept: coverage=%.3f\n", dp.Coverage)
+			fmt.Fprintf(&buf, "stage3 inferred auto-accept: %s coverage=%.3f\n", dp.Source, dp.Coverage)
 		}
-		drainCh <- stageResult{candidate: dp, autoAccept: accept, diag: &buf}
+		envelopeCh <- stageResult{candidate: dp, autoAccept: accept, diag: &buf}
 	}()
 
 	// Read in priority order. Auto-accept of an earlier stage wins
@@ -178,18 +161,16 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 		return finalize(library.candidate, total, len(evalSet), estimated, truncated), nil
 	}
 
-	drain := <-drainCh
-	flushDiag(diag, structured.diag, library.diag, drain.diag)
-	if drain.autoAccept {
-		return finalize(drain.candidate, total, len(evalSet), estimated, truncated), nil
+	envelope := <-envelopeCh
+	flushDiag(diag, structured.diag, library.diag, envelope.diag)
+	if envelope.autoAccept {
+		return finalize(envelope.candidate, total, len(evalSet), estimated, truncated), nil
 	}
 
 	var best *DiscoveredPattern
 	best = pickBetter(best, structured.candidate)
 	best = pickBetter(best, library.candidate)
-	if drain.candidate != nil && drain.candidate.Grok != "" {
-		best = pickBetter(best, drain.candidate)
-	}
+	best = pickBetter(best, envelope.candidate)
 
 	if best != nil && best.MatchedCount > 0 {
 		return finalize(best, total, len(evalSet), estimated, truncated), nil
@@ -228,7 +209,7 @@ type stageResult struct {
 
 // flushDiag writes per-stage diagnostic buffers to the user-supplied
 // writer in the order given by the caller. Callers always pass buffers
-// in stage-priority order (structured, library, drain), which preserves
+// in stage-priority order (structured, library, inferred), which preserves
 // the historical "stage1 → stage2 → stage3" output shape regardless of
 // which goroutine finished first. The io.Discard short-circuit avoids
 // touching buffers that no one will read.
@@ -286,7 +267,7 @@ func familyRank(family string) int {
 		return 0
 	case "structured":
 		return 1
-	case "drain":
+	case "inferred":
 		return 2
 	case "fallback":
 		return 3
@@ -432,7 +413,7 @@ func tryLibrary(sample, all []string, threshold float64, diag io.Writer) *Discov
 }
 
 // DiscoverTopK returns the top K library candidates plus, when
-// available, a structured candidate and the drain candidate. It is a
+// available, structured and inferred candidates. It is a
 // lighter-weight cousin of Discover: useful for UIs that want to
 // surface "the top 3 patterns matching this log" instead of a single
 // answer. Patterns are returned in descending preference order using
@@ -496,228 +477,12 @@ func DiscoverTopK(lines []string, k int, opts Options) ([]*DiscoveredPattern, er
 			out = append(out, finalize(s, total, len(evalSet), estimated, truncated))
 		}
 	}
+	if len(out) < k {
+		if e := pickBetter(tryTiling(sample, evalSet, io.Discard), tryTextEnvelope(sample, evalSet, io.Discard)); e != nil {
+			out = append(out, finalize(e, total, len(evalSet), estimated, truncated))
+		}
+	}
 	return out, nil
-}
-
-// deriveFromDrain learns templates from trainLines (a bounded sample of
-// the input) and measures the resulting Grok against evalLines (the
-// coverage sample, which equals the full input when it is small enough).
-// Separating the two keeps drain3's clustering cost bounded on huge
-// inputs while still scoring coverage on a representative population.
-func deriveFromDrain(trainLines, evalLines []string, diag io.Writer) (*DiscoveredPattern, error) {
-	clusters, err := trainDrain(trainLines)
-	if err != nil {
-		return nil, err
-	}
-	if len(clusters) == 0 {
-		return nil, errors.New("drain produced no clusters")
-	}
-	dominant := clusters[0]
-	if dominant.SampleLineIdx < 0 || dominant.SampleLineIdx >= len(trainLines) {
-		return nil, errors.New("drain dominant cluster has no representative line")
-	}
-	sample := trainLines[dominant.SampleLineIdx]
-	slots := resolveSlots(dominant, trainLines)
-	fields := autoFieldsFromSlots(slots, sample, dominant)
-	grok := Render(sample, fields, slots)
-
-	re, err := CompileGrok(grok, nil)
-	if err != nil {
-		return nil, fmt.Errorf("rendered pattern failed to compile: %w", err)
-	}
-	matched := EvaluateCoverage(re, evalLines)
-	cov := ratio(matched, len(evalLines))
-	fmt.Fprintf(diag, "drain: cluster=%d matched=%d/%d clusters=%d\n",
-		dominant.ID, matched, len(evalLines), len(clusters))
-
-	// When the dominant cluster alone leaves a lot of lines unmatched but
-	// the input is made of only a handful of distinct shapes, union the
-	// top clusters into a single alternation so multi-format logs are
-	// detected instead of collapsing to a generic fallback.
-	if cov < multiPatternMinCoverage && len(clusters) >= 2 {
-		if multi := deriveMultiPattern(clusters, trainLines, evalLines, cov, diag); multi != nil {
-			return multi, nil
-		}
-	}
-
-	if !usefulDrainGrok(grok) {
-		fmt.Fprintf(diag, "drain: skipping literal-only pattern\n")
-		return nil, nil
-	}
-
-	// Short samples make partial Drain matches especially brittle: a
-	// two-line cluster in a five-line input is usually an accident, not a
-	// format. Keep Drain for short inputs only when it covers enough of the
-	// sample to auto-accept.
-	if len(evalLines) < drainShortSampleMinLines && cov < drainAutoAcceptCoverage {
-		fmt.Fprintf(diag, "drain: skipping weak short-sample pattern (coverage %.3f < %.2f, lines=%d < %d)\n",
-			cov, drainAutoAcceptCoverage, len(evalLines), drainShortSampleMinLines)
-		return nil, nil
-	}
-
-	// Reject weak partial Drain candidates. A minority cluster may be a
-	// valid sub-format, but in single-pattern discovery it is usually more
-	// honest to fall back unless Drain explains a meaningful share of the
-	// input. Multi-format callers should use DiscoverMulti for partial
-	// coverage.
-	if cov < drainMinCoverage {
-		fmt.Fprintf(diag, "drain: skipping weak pattern (coverage %.3f < %.2f)\n", cov, drainMinCoverage)
-		return nil, nil
-	}
-
-	return &DiscoveredPattern{
-		Source:       "drain",
-		SourceFamily: "drain",
-		Grok:         grok,
-		Coverage:     cov,
-		MatchedCount: matched,
-		TotalLines:   len(evalLines),
-		SampleLine:   sample,
-	}, nil
-}
-
-// Multi-pattern tuning. These only take effect when the dominant drain
-// cluster is a poor fit for the whole input, so single-format logs (where
-// the dominant cluster already matches ~everything) never reach this code.
-var (
-	// drainAutoAcceptCoverage is the coverage required for a drain
-	// candidate to win immediately.
-	drainAutoAcceptCoverage = 0.85
-	// drainMinCoverage is the minimum coverage for a non-auto-accepted
-	// single Drain candidate. Below this, fallback is usually a more honest
-	// answer for single-pattern discovery.
-	drainMinCoverage = 0.50
-	// drainShortSampleMinLines is the evidence floor below which Drain is
-	// allowed to win only when it clears drainAutoAcceptCoverage.
-	drainShortSampleMinLines = 10
-	// drainMultiMinBranchLines rejects one-off clusters from Drain unions.
-	// A branch needs at least two observed lines before we present it as a
-	// reusable shape.
-	drainMultiMinBranchLines = 2
-	// multiPatternMinCoverage is the dominant-cluster coverage below which
-	// we consider unioning multiple clusters.
-	multiPatternMinCoverage = 0.85
-	// multiPatternMaxClusters bounds how many distinct shapes we treat as
-	// a "small number of patterns" worth unioning. The goal is files made
-	// of fewer than ~10 formats.
-	multiPatternMaxClusters = 10
-	// multiPatternMinGain is the absolute coverage improvement the union
-	// must deliver over the dominant cluster alone to be worth returning.
-	multiPatternMinGain = 0.15
-	// multiPatternMinCombined is the floor the unioned coverage must clear
-	// before we prefer it over the normal single-cluster / fallback path.
-	multiPatternMinCombined = 0.90
-)
-
-// deriveMultiPattern handles inputs composed of a small number (fewer than
-// multiPatternMaxClusters) of distinct line shapes. It renders each of the
-// top clusters into its own Grok body and greedily unions the branches
-// that add coverage into a single alternation, so multi-format logs are
-// detected as one combined pattern instead of collapsing to a generic
-// GREEDYDATA fallback. Returns nil (caller falls back to the dominant
-// handling) unless the union both clears multiPatternMinCombined coverage
-// and improves on the dominant cluster by at least multiPatternMinGain.
-func deriveMultiPattern(clusters []cluster, trainLines, evalLines []string, dominantCov float64, diag io.Writer) *DiscoveredPattern {
-	if len(clusters) < 2 || len(clusters) > multiPatternMaxClusters {
-		return nil
-	}
-
-	// Track which eval lines remain unmatched so each added branch is only
-	// credited for the new lines it explains.
-	remaining := make([]bool, len(evalLines))
-	for i := range remaining {
-		remaining[i] = true
-	}
-
-	type branch struct {
-		grok string
-		re   *regexp.Regexp
-	}
-	var branches []branch
-	for _, c := range clusters {
-		if c.LineCount < drainMultiMinBranchLines {
-			fmt.Fprintf(diag, "drain multi: skipping cluster=%d support=%d < %d\n",
-				c.ID, c.LineCount, drainMultiMinBranchLines)
-			continue
-		}
-		grok, ok := renderCluster(c, trainLines)
-		if !ok {
-			continue
-		}
-		if !usefulDrainGrok(grok) {
-			fmt.Fprintf(diag, "drain multi: skipping literal-only cluster=%d\n", c.ID)
-			continue
-		}
-		re, err := CompileGrok(grok, nil)
-		if err != nil {
-			continue
-		}
-		gained := 0
-		for i, line := range evalLines {
-			if remaining[i] && re.MatchString(line) {
-				remaining[i] = false
-				gained++
-			}
-		}
-		if gained == 0 {
-			continue
-		}
-		if gained < drainMultiMinBranchLines {
-			fmt.Fprintf(diag, "drain multi: skipping cluster=%d gain=%d < %d\n",
-				c.ID, gained, drainMultiMinBranchLines)
-			continue
-		}
-		branches = append(branches, branch{grok: grok, re: re})
-	}
-	if len(branches) < 2 {
-		return nil
-	}
-
-	parts := make([]string, 0, len(branches))
-	for _, b := range branches {
-		parts = append(parts, "(?:"+b.grok+")")
-	}
-	unionGrok := "(?:" + strings.Join(parts, "|") + ")"
-
-	unionRe, err := CompileGrok(unionGrok, nil)
-	if err != nil {
-		fmt.Fprintf(diag, "drain multi: union failed to compile: %v\n", err)
-		return nil
-	}
-	matched := EvaluateCoverage(unionRe, evalLines)
-	cov := ratio(matched, len(evalLines))
-	fmt.Fprintf(diag, "drain multi: branches=%d matched=%d/%d coverage=%.3f (dominant=%.3f)\n",
-		len(branches), matched, len(evalLines), cov, dominantCov)
-
-	if cov < multiPatternMinCombined || cov-dominantCov < multiPatternMinGain {
-		return nil
-	}
-	return &DiscoveredPattern{
-		Source:       fmt.Sprintf("drain:multi(%d)", len(branches)),
-		SourceFamily: "drain",
-		Grok:         unionGrok,
-		Coverage:     cov,
-		MatchedCount: matched,
-		TotalLines:   len(evalLines),
-		SampleLine:   trainLines[clusters[0].SampleLineIdx],
-	}
-}
-
-// renderCluster renders a single drain cluster into a Grok body using its
-// representative line. Returns ok=false when the cluster has no usable
-// representative line.
-func renderCluster(c cluster, trainLines []string) (string, bool) {
-	if c.SampleLineIdx < 0 || c.SampleLineIdx >= len(trainLines) {
-		return "", false
-	}
-	sample := trainLines[c.SampleLineIdx]
-	slots := resolveSlots(c, trainLines)
-	fields := autoFieldsFromSlots(slots, sample, c)
-	return Render(sample, fields, slots), true
-}
-
-func usefulDrainGrok(grok string) bool {
-	return typedCaptureCount(grok) > 0
 }
 
 func deriveSafeFallback(lines []string) *DiscoveredPattern {

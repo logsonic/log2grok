@@ -39,27 +39,31 @@ func init() {
 	if err := loadEmbeddedDefaults(); err != nil {
 		panic(fmt.Errorf("pattern: failed to load embedded defaults: %w", err))
 	}
-	RefreshLibrary()
 }
 
 // loadEmbeddedDefaults populates the package-level vars (GrokPrimitives,
 // KnownPatternsLibrary) from the embedded JSON. Called from init() and
 // by LoadConfig as a fallback.
 func loadEmbeddedDefaults() error {
+	prim, library, err := embeddedDefaults()
+	if err != nil {
+		return err
+	}
+	commitPatternState(prim, library, nil)
+	return nil
+}
+
+func embeddedDefaults() (map[string]string, []KnownPattern, error) {
 	prim, err := decodePrimitives(mustReadEmbedded(fileNamePrimitives))
 	if err != nil {
-		return fmt.Errorf("primitives: %w", err)
+		return nil, nil, fmt.Errorf("primitives: %w", err)
 	}
 	library, err := decodePatterns(mustReadEmbedded(fileNamePatterns))
 	if err != nil {
-		return fmt.Errorf("patterns: %w", err)
+		return nil, nil, fmt.Errorf("patterns: %w", err)
 	}
 	FillEmptyDescriptionsInPlace(library)
-
-	GrokPrimitives = prim
-	GrokPrimitivesOverrides = GrokPrimitives
-	KnownPatternsLibrary = library
-	return nil
+	return prim, library, nil
 }
 
 func mustReadEmbedded(name string) []byte {
@@ -114,6 +118,10 @@ const (
 // Call this after directly mutating any of the source vars (or after
 // LoadConfig).
 func RefreshLibrary() {
-	composeKnownPatterns()
+	patternStateMu.Lock()
+	composeKnownPatternsLocked()
+	patternStateVersion++
+	patternStateMu.Unlock()
 	resetCompiledLibrary()
+	resetTilerCaches()
 }
