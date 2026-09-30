@@ -129,15 +129,20 @@ func ensureCompExprs() {
 }
 
 func resetTilerCaches() {
+	// Invalidate the caches by version, but do NOT drop the compiled slices:
+	// matchComposite and classifyToken index them under the matching read
+	// lock, and a concurrent reset that nil'd a slice between a reader's
+	// ensure*() call and its read would make that reader index an empty slice
+	// and panic. Keeping the (now stale) slices means a reader in that window
+	// reads a valid-length slice; the bumped version forces the next
+	// ensure*() call to rebuild before anything observes stale regexes.
 	compExprMu.Lock()
 	compExprVer = 0
-	compExprRe = nil
 	compExprLoaded = false
 	compExprMu.Unlock()
 
 	tileSinglesMu.Lock()
 	tileSinglesVersion = 0
-	tileSingles = nil
 	tileDataPrim = nil
 	tileHostnamePrim = nil
 	tileSinglesMu.Unlock()

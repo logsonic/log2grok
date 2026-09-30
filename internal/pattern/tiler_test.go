@@ -64,6 +64,32 @@ func TestCompositeExprsTrackPrimitiveReplacement(t *testing.T) {
 	}
 }
 
+// resetTilerCaches runs concurrently with Discover (it is called by the
+// documented config-replacement APIs). matchComposite and classifyToken index
+// the compiled slices under their read locks, so a reset must not leave an
+// empty slice for a reader that validated the cache just before the reset.
+// This pins the invariant directly; the earlier real-time interleaving could
+// only be reproduced by a sustained reset storm.
+func TestTilerResetKeepsIndexedCachesPopulated(t *testing.T) {
+	t.Cleanup(restoreEmbeddedDefaults(t))
+
+	ensureCompExprs()
+	ensureTileSingles()
+	if len(compExprRe) != len(tileComposites) || len(tileSingles) == 0 {
+		t.Fatal("caches not populated before reset")
+	}
+
+	resetTilerCaches()
+
+	if len(compExprRe) != len(tileComposites) {
+		t.Fatalf("resetTilerCaches left compExprRe len %d, want %d (matchComposite would panic)",
+			len(compExprRe), len(tileComposites))
+	}
+	if len(tileSingles) == 0 {
+		t.Fatal("resetTilerCaches left tileSingles empty (classifyToken would panic)")
+	}
+}
+
 func TestTiledUnionDoesNotConsumeSkippedBranchMatches(t *testing.T) {
 	eval := []string{
 		"common0 1",
