@@ -24,6 +24,19 @@ As a Go library:
 go get github.com/logsonic/log2grok@latest
 ```
 
+## Web UI
+
+A tiny local web page for trying log2grok without the CLI:
+
+```sh
+go run ./cmd/log2grok-web
+# open http://127.0.0.1:8080
+```
+
+Paste log lines and press **Discover pattern** to see the Grok pattern, its
+source, and its coverage. Flags: `-addr` (default `127.0.0.1:8080`) and
+`-config-dir` (externalized pattern library; empty uses the embedded default).
+
 ## Use as a Go library
 
 The public API lives under `github.com/logsonic/log2grok/pkg/log2grok`. Pass the

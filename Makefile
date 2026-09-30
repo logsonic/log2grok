@@ -1,4 +1,4 @@
-.PHONY: buildpacks build test golden lint run bench
+.PHONY: buildpacks build test golden lint run bench web web-run
 
 buildpacks:
 	go run ./cmd/buildpacks
@@ -21,3 +21,9 @@ run: build
 
 bench:
 	go test -bench=. -benchmem ./test/benchmark/
+
+web:
+	go build -trimpath -ldflags="-s -w" -o bin/log2grok-web ./cmd/log2grok-web
+
+web-run:
+	go run ./cmd/log2grok-web
