@@ -10,8 +10,8 @@ import (
 
 type structuredProbe struct {
 	Name   string
-	Likely func(sample []string) bool
-	Render func(sample []string) (grok string, source string, ok bool)
+	Likely func(js *jsonSample) bool
+	Render func(js *jsonSample) (grok string, source string, ok bool)
 }
 
 var structuredProbes = []structuredProbe{
@@ -52,23 +52,23 @@ func parseJSONLine(line string) (map[string]any, bool) {
 	return m, true
 }
 
-func jsonObjectFraction(sample []string) float64 {
-	if len(sample) == 0 {
+func jsonObjectFraction(js *jsonSample) float64 {
+	if js.Count() == 0 {
 		return 0
 	}
 	hits := 0
-	for _, line := range sample {
-		if _, ok := parseJSONLine(line); ok {
+	for i := range js.Lines() {
+		if _, ok := js.Obj(i); ok {
 			hits++
 		}
 	}
-	return float64(hits) / float64(len(sample))
+	return float64(hits) / float64(js.Count())
 }
 
-func keyFreq(sample []string) (count int, freq map[string]int) {
+func keyFreq(js *jsonSample) (count int, freq map[string]int) {
 	freq = make(map[string]int)
-	for _, line := range sample {
-		obj, ok := parseJSONLine(line)
+	for i := range js.Lines() {
+		obj, ok := js.Obj(i)
 		if !ok {
 			continue
 		}
@@ -100,13 +100,13 @@ type jsonShape struct {
 	FirstKeys []string
 }
 
-func observeJSONShape(sample []string) jsonShape {
+func observeJSONShape(js *jsonSample) jsonShape {
 	shape := jsonShape{
 		KeyFreq:  make(map[string]int),
 		TypeFreq: make(map[string]map[string]int),
 	}
-	for _, line := range sample {
-		obj, ok := parseJSONLine(line)
+	for i, line := range js.Lines() {
+		obj, ok := js.Obj(i)
 		if !ok {
 			continue
 		}
@@ -203,8 +203,8 @@ func dominantJSONKind(shape jsonShape, key string) string {
 	return bestKind
 }
 
-func renderJSONSkeleton(sample []string, source string) (string, string, bool) {
-	shape := observeJSONShape(sample)
+func renderJSONSkeleton(js *jsonSample, source string) (string, string, bool) {
+	shape := observeJSONShape(js)
 	keys := commonJSONKeys(shape, 0.80)
 	if len(keys) == 0 {
 		return `\{%{GREEDYDATA:json}\}`, source, true
@@ -214,8 +214,8 @@ func renderJSONSkeleton(sample []string, source string) (string, string, bool) {
 		common[key] = true
 	}
 
-	if jsonKeyOrderIsStable(sample, keys) {
-		return renderJSONSkeletonOrdered(sample, shape, keys, common, source)
+	if jsonKeyOrderIsStable(js, keys) {
+		return renderJSONSkeletonOrdered(shape, keys, common, source)
 	}
 	return renderJSONSkeletonUnordered(shape, keys, source)
 }
@@ -223,7 +223,7 @@ func renderJSONSkeleton(sample []string, source string) (string, string, bool) {
 // renderJSONSkeletonOrdered emits the legacy, order-locked shape: keys
 // must appear in their first-line order, separated by literal commas.
 // This produces the tightest pattern when producers are deterministic.
-func renderJSONSkeletonOrdered(sample []string, shape jsonShape, keys []string, common map[string]bool, source string) (string, string, bool) {
+func renderJSONSkeletonOrdered(shape jsonShape, keys []string, common map[string]bool, source string) (string, string, bool) {
 	hasExtra := false
 	for key := range shape.KeyFreq {
 		if !common[key] {
@@ -241,7 +241,6 @@ func renderJSONSkeletonOrdered(sample []string, shape jsonShape, keys []string, 
 		grok += `(?:\s*,\s*%{GREEDYDATA:json_extra})?`
 	}
 	grok += `\s*\}`
-	_ = sample
 	return grok, source, true
 }
 
@@ -274,12 +273,12 @@ func renderJSONSkeletonUnordered(shape jsonShape, keys []string, source string) 
 // the targeted keys in the same relative order (extra keys interleaved
 // are allowed). When false, the renderer should produce an order-tolerant
 // pattern instead of an order-locked one.
-func jsonKeyOrderIsStable(sample []string, keys []string) bool {
+func jsonKeyOrderIsStable(js *jsonSample, keys []string) bool {
 	target := make(map[string]int, len(keys))
 	for i, k := range keys {
 		target[k] = i
 	}
-	for _, line := range sample {
+	for _, line := range js.Lines() {
 		ordered := orderedJSONKeys(strings.TrimSpace(line))
 		if len(ordered) == 0 {
 			continue
@@ -386,9 +385,9 @@ func jsonValueGrok(field, kind string) string {
 
 var jsonProbe = structuredProbe{
 	Name:   "JSON Object",
-	Likely: func(sample []string) bool { return jsonObjectFraction(sample) >= 0.90 },
-	Render: func(sample []string) (string, string, bool) {
-		return renderJSONSkeleton(sample, "structured:JSON Object")
+	Likely: func(js *jsonSample) bool { return jsonObjectFraction(js) >= 0.90 },
+	Render: func(js *jsonSample) (string, string, bool) {
+		return renderJSONSkeleton(js, "structured:JSON Object")
 	},
 }
 
@@ -396,12 +395,12 @@ var jsonProbe = structuredProbe{
 
 var dockerJSONProbe = structuredProbe{
 	Name: "Docker JSON",
-	Likely: func(sample []string) bool {
-		total, freq := keyFreq(sample)
+	Likely: func(js *jsonSample) bool {
+		total, freq := keyFreq(js)
 		return total > 0 && hasKeysAtFraction(freq, total, 0.80, "log", "stream", "time")
 	},
-	Render: func(sample []string) (string, string, bool) {
-		return renderJSONSkeleton(sample, "structured:Docker JSON")
+	Render: func(js *jsonSample) (string, string, bool) {
+		return renderJSONSkeleton(js, "structured:Docker JSON")
 	},
 }
 
@@ -409,12 +408,12 @@ var dockerJSONProbe = structuredProbe{
 
 var pinoJSONProbe = structuredProbe{
 	Name: "Pino JSON",
-	Likely: func(sample []string) bool {
-		total, freq := keyFreq(sample)
+	Likely: func(js *jsonSample) bool {
+		total, freq := keyFreq(js)
 		return total > 0 && hasKeysAtFraction(freq, total, 0.80, "level", "time", "msg")
 	},
-	Render: func(sample []string) (string, string, bool) {
-		return renderJSONSkeleton(sample, "structured:Pino JSON")
+	Render: func(js *jsonSample) (string, string, bool) {
+		return renderJSONSkeleton(js, "structured:Pino JSON")
 	},
 }
 
@@ -422,12 +421,12 @@ var pinoJSONProbe = structuredProbe{
 
 var bunyanJSONProbe = structuredProbe{
 	Name: "Bunyan JSON",
-	Likely: func(sample []string) bool {
-		total, freq := keyFreq(sample)
+	Likely: func(js *jsonSample) bool {
+		total, freq := keyFreq(js)
 		return total > 0 && hasKeysAtFraction(freq, total, 0.80, "name", "level", "time", "msg")
 	},
-	Render: func(sample []string) (string, string, bool) {
-		return renderJSONSkeleton(sample, "structured:Bunyan JSON")
+	Render: func(js *jsonSample) (string, string, bool) {
+		return renderJSONSkeleton(js, "structured:Bunyan JSON")
 	},
 }
 
@@ -435,16 +434,16 @@ var bunyanJSONProbe = structuredProbe{
 
 var zapJSONProbe = structuredProbe{
 	Name: "Zap JSON",
-	Likely: func(sample []string) bool {
-		total, freq := keyFreq(sample)
+	Likely: func(js *jsonSample) bool {
+		total, freq := keyFreq(js)
 		if total == 0 {
 			return false
 		}
 		hasTS := freq["ts"] > 0 || freq["timestamp"] > 0
 		return hasTS && hasKeysAtFraction(freq, total, 0.80, "level", "msg")
 	},
-	Render: func(sample []string) (string, string, bool) {
-		return renderJSONSkeleton(sample, "structured:Zap JSON")
+	Render: func(js *jsonSample) (string, string, bool) {
+		return renderJSONSkeleton(js, "structured:Zap JSON")
 	},
 }
 
@@ -452,15 +451,15 @@ var zapJSONProbe = structuredProbe{
 
 var ecsJSONProbe = structuredProbe{
 	Name: "ECS JSON",
-	Likely: func(sample []string) bool {
-		total, freq := keyFreq(sample)
+	Likely: func(js *jsonSample) bool {
+		total, freq := keyFreq(js)
 		if total == 0 {
 			return false
 		}
 		return freq["@timestamp"]*100/total >= 80 && (freq["log.level"] > 0 || freq["ecs.version"] > 0)
 	},
-	Render: func(sample []string) (string, string, bool) {
-		return renderJSONSkeleton(sample, "structured:ECS JSON")
+	Render: func(js *jsonSample) (string, string, bool) {
+		return renderJSONSkeleton(js, "structured:ECS JSON")
 	},
 }
 
@@ -468,15 +467,15 @@ var ecsJSONProbe = structuredProbe{
 
 var cloudTrailJSONProbe = structuredProbe{
 	Name: "CloudTrail JSON",
-	Likely: func(sample []string) bool {
-		total, freq := keyFreq(sample)
+	Likely: func(js *jsonSample) bool {
+		total, freq := keyFreq(js)
 		if total == 0 {
 			return false
 		}
 		return hasKeysAtFraction(freq, total, 0.80, "eventVersion", "eventTime", "eventSource", "eventName")
 	},
-	Render: func(sample []string) (string, string, bool) {
-		return renderJSONSkeleton(sample, "structured:CloudTrail JSON")
+	Render: func(js *jsonSample) (string, string, bool) {
+		return renderJSONSkeleton(js, "structured:CloudTrail JSON")
 	},
 }
 
@@ -484,15 +483,15 @@ var cloudTrailJSONProbe = structuredProbe{
 
 var suricataEVEProbe = structuredProbe{
 	Name: "Suricata EVE",
-	Likely: func(sample []string) bool {
-		total, freq := keyFreq(sample)
+	Likely: func(js *jsonSample) bool {
+		total, freq := keyFreq(js)
 		if total == 0 {
 			return false
 		}
 		return hasKeysAtFraction(freq, total, 0.80, "timestamp", "event_type", "src_ip")
 	},
-	Render: func(sample []string) (string, string, bool) {
-		return renderJSONSkeleton(sample, "structured:Suricata EVE")
+	Render: func(js *jsonSample) (string, string, bool) {
+		return renderJSONSkeleton(js, "structured:Suricata EVE")
 	},
 }
 
@@ -500,15 +499,15 @@ var suricataEVEProbe = structuredProbe{
 
 var kubernetesAuditJSONProbe = structuredProbe{
 	Name: "Kubernetes Audit JSON",
-	Likely: func(sample []string) bool {
-		total, freq := keyFreq(sample)
+	Likely: func(js *jsonSample) bool {
+		total, freq := keyFreq(js)
 		if total == 0 {
 			return false
 		}
 		return freq["kind"]*100/total >= 80 && hasKeysAtFraction(freq, total, 0.80, "auditID", "stage", "verb")
 	},
-	Render: func(sample []string) (string, string, bool) {
-		return renderJSONSkeleton(sample, "structured:Kubernetes Audit JSON")
+	Render: func(js *jsonSample) (string, string, bool) {
+		return renderJSONSkeleton(js, "structured:Kubernetes Audit JSON")
 	},
 }
 
@@ -516,16 +515,16 @@ var kubernetesAuditJSONProbe = structuredProbe{
 
 var auditdJSONProbe = structuredProbe{
 	Name: "auditd JSON",
-	Likely: func(sample []string) bool {
-		total, freq := keyFreq(sample)
+	Likely: func(js *jsonSample) bool {
+		total, freq := keyFreq(js)
 		if total == 0 {
 			return false
 		}
 		return hasKeysAtFraction(freq, total, 0.80, "type", "msg") &&
 			(freq["audit_type"] > 0 || freq["auid"] > 0 || freq["ses"] > 0 || freq["uid"] > 0)
 	},
-	Render: func(sample []string) (string, string, bool) {
-		return renderJSONSkeleton(sample, "structured:auditd JSON")
+	Render: func(js *jsonSample) (string, string, bool) {
+		return renderJSONSkeleton(js, "structured:auditd JSON")
 	},
 }
 
@@ -533,16 +532,16 @@ var auditdJSONProbe = structuredProbe{
 
 var vaultAuditJSONProbe = structuredProbe{
 	Name: "Vault Audit JSON",
-	Likely: func(sample []string) bool {
-		total, freq := keyFreq(sample)
+	Likely: func(js *jsonSample) bool {
+		total, freq := keyFreq(js)
 		if total == 0 {
 			return false
 		}
 		return hasKeysAtFraction(freq, total, 0.80, "time", "type") &&
 			(freq["auth"] > 0 || freq["request"] > 0 || freq["response"] > 0)
 	},
-	Render: func(sample []string) (string, string, bool) {
-		return renderJSONSkeleton(sample, "structured:Vault Audit JSON")
+	Render: func(js *jsonSample) (string, string, bool) {
+		return renderJSONSkeleton(js, "structured:Vault Audit JSON")
 	},
 }
 
@@ -551,25 +550,25 @@ var vaultAuditJSONProbe = structuredProbe{
 var logfmtProbe = structuredProbe{
 	Name:   "logfmt",
 	Likely: looksLikeLogfmt,
-	Render: func(sample []string) (string, string, bool) {
-		if grok, ok := renderLogfmtKeyed(sample); ok {
+	Render: func(js *jsonSample) (string, string, bool) {
+		if grok, ok := renderLogfmtKeyed(js.Lines()); ok {
 			return grok, "structured:logfmt", true
 		}
 		return `%{GREEDYDATA:kvpairs}`, "structured:logfmt", true
 	},
 }
 
-func looksLikeLogfmt(sample []string) bool {
-	if len(sample) == 0 {
+func looksLikeLogfmt(js *jsonSample) bool {
+	if js.Count() == 0 {
 		return false
 	}
 	hits := 0
-	for _, line := range sample {
+	for _, line := range js.Lines() {
 		if logfmtFraction(line) >= 0.70 {
 			hits++
 		}
 	}
-	return float64(hits)/float64(len(sample)) >= 0.80
+	return float64(hits)/float64(js.Count()) >= 0.80
 }
 
 func logfmtFraction(line string) float64 {
@@ -593,16 +592,16 @@ func logfmtFraction(line string) float64 {
 
 var cefProbe = structuredProbe{
 	Name: "CEF",
-	Likely: func(sample []string) bool {
+	Likely: func(js *jsonSample) bool {
 		hits := 0
-		for _, line := range sample {
+		for _, line := range js.Lines() {
 			if strings.Contains(line, "CEF:") && strings.Count(line, "|") >= 7 {
 				hits++
 			}
 		}
-		return len(sample) > 0 && float64(hits)/float64(len(sample)) >= 0.85
+		return js.Count() > 0 && float64(hits)/float64(js.Count()) >= 0.85
 	},
-	Render: func(sample []string) (string, string, bool) {
+	Render: func(js *jsonSample) (string, string, bool) {
 		return `(?:%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} )?CEF:%{INT:cef_version}\|%{DATA:vendor}\|%{DATA:product}\|%{DATA:product_version}\|%{DATA:signature}\|%{DATA:name}\|%{DATA:severity}\|%{GREEDYDATA:extensions}`,
 			"structured:CEF", true
 	},
@@ -612,16 +611,16 @@ var cefProbe = structuredProbe{
 
 var leefProbe = structuredProbe{
 	Name: "LEEF",
-	Likely: func(sample []string) bool {
+	Likely: func(js *jsonSample) bool {
 		hits := 0
-		for _, line := range sample {
+		for _, line := range js.Lines() {
 			if strings.Contains(line, "LEEF:") && strings.Count(line, "|") >= 4 {
 				hits++
 			}
 		}
-		return len(sample) > 0 && float64(hits)/float64(len(sample)) >= 0.85
+		return js.Count() > 0 && float64(hits)/float64(js.Count()) >= 0.85
 	},
-	Render: func(sample []string) (string, string, bool) {
+	Render: func(js *jsonSample) (string, string, bool) {
 		return `LEEF:%{NOTSPACE:leef_version}\|%{DATA:vendor}\|%{DATA:product}\|%{DATA:product_version}\|%{DATA:event_id}\|%{GREEDYDATA:extensions}`,
 			"structured:LEEF", true
 	},
@@ -635,8 +634,8 @@ var w3cIISProbe = structuredProbe{
 	Render: renderW3C,
 }
 
-func looksLikeW3C(sample []string) bool {
-	for _, line := range sample {
+func looksLikeW3C(js *jsonSample) bool {
+	for _, line := range js.Lines() {
 		if strings.HasPrefix(line, "#Fields:") {
 			return true
 		}
@@ -644,9 +643,9 @@ func looksLikeW3C(sample []string) bool {
 	return false
 }
 
-func renderW3C(sample []string) (string, string, bool) {
+func renderW3C(js *jsonSample) (string, string, bool) {
 	fieldsLine := ""
-	for _, line := range sample {
+	for _, line := range js.Lines() {
 		if !strings.HasPrefix(line, "#Fields:") {
 			continue
 		}
@@ -703,8 +702,8 @@ var androidLogcatLineRe = regexp.MustCompile(`^\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.
 
 var androidLogcatProbe = structuredProbe{
 	Name:   "Android Logcat",
-	Likely: func(sample []string) bool { return lineMatchFraction(sample, androidLogcatLineRe) >= 0.80 },
-	Render: func(sample []string) (string, string, bool) {
+	Likely: func(js *jsonSample) bool { return lineMatchFraction(js, androidLogcatLineRe) >= 0.80 },
+	Render: func(js *jsonSample) (string, string, bool) {
 		return `%{MONTHNUM2:month}-%{MONTHDAY2:day} %{TIME:time}\s+%{INT:pid}\s+%{INT:tid} %{WORD:level} %{NOTSPACE:tag}: %{GREEDYDATA:message}`,
 			"structured:Android Logcat", true
 	},
@@ -714,8 +713,8 @@ var healthAppLineRe = regexp.MustCompile(`^\d{8}-\d{1,2}:\d{1,2}:\d{1,2}:\d+\|[^
 
 var healthAppProbe = structuredProbe{
 	Name:   "HealthApp",
-	Likely: func(sample []string) bool { return lineMatchFraction(sample, healthAppLineRe) >= 0.80 },
-	Render: func(sample []string) (string, string, bool) {
+	Likely: func(js *jsonSample) bool { return lineMatchFraction(js, healthAppLineRe) >= 0.80 },
+	Render: func(js *jsonSample) (string, string, bool) {
 		return `%{INT:date}-%{INT:hour}:%{INT:minute}:%{INT:second}:%{INT:millis}\|%{NOTSPACE:component}\|%{INT:pid}\|%{GREEDYDATA:message}`,
 			"structured:HealthApp", true
 	},
@@ -725,8 +724,8 @@ var sparkLineRe = regexp.MustCompile(`^\d{2}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2}\s+[
 
 var sparkProbe = structuredProbe{
 	Name:   "Spark",
-	Likely: func(sample []string) bool { return lineMatchFraction(sample, sparkLineRe) >= 0.80 },
-	Render: func(sample []string) (string, string, bool) {
+	Likely: func(js *jsonSample) bool { return lineMatchFraction(js, sparkLineRe) >= 0.80 },
+	Render: func(js *jsonSample) (string, string, bool) {
 		return `%{INT:year}/%{INT:month}/%{INT:day} %{TIME:time} %{LOGLEVEL:level} %{NOTSPACE:logger}: %{GREEDYDATA:message}`,
 			"structured:Spark", true
 	},
@@ -736,45 +735,45 @@ var windowsCBSLineRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2
 
 var windowsCBSProbe = structuredProbe{
 	Name:   "Windows CBS",
-	Likely: func(sample []string) bool { return lineMatchFraction(sample, windowsCBSLineRe) >= 0.80 },
-	Render: func(sample []string) (string, string, bool) {
+	Likely: func(js *jsonSample) bool { return lineMatchFraction(js, windowsCBSLineRe) >= 0.80 },
+	Render: func(js *jsonSample) (string, string, bool) {
 		return `%{TIMESTAMP_ISO8601:timestamp}, %{LOGLEVEL:level}\s+%{NOTSPACE:component}\s+%{GREEDYDATA:message}`,
 			"structured:Windows CBS", true
 	},
 }
 
-func lineMatchFraction(sample []string, re *regexp.Regexp) float64 {
-	if len(sample) == 0 {
+func lineMatchFraction(js *jsonSample, re *regexp.Regexp) float64 {
+	if js.Count() == 0 {
 		return 0
 	}
 	hits := 0
-	for _, line := range sample {
+	for _, line := range js.Lines() {
 		if re.MatchString(line) {
 			hits++
 		}
 	}
-	return float64(hits) / float64(len(sample))
+	return float64(hits) / float64(js.Count())
 }
 
 // ---------- CSV / TSV ----------
 
 var csvProbe = structuredProbe{
 	Name:   "CSV",
-	Likely: func(sample []string) bool { return looksLikeDelim(sample, ',') },
-	Render: func(sample []string) (string, string, bool) { return renderDelim(sample, ',', "structured:CSV") },
+	Likely: func(js *jsonSample) bool { return looksLikeDelim(js, ',') },
+	Render: func(js *jsonSample) (string, string, bool) { return renderDelim(js, ',', "structured:CSV") },
 }
 
 var tsvProbe = structuredProbe{
 	Name:   "TSV",
-	Likely: func(sample []string) bool { return looksLikeDelim(sample, '\t') },
-	Render: func(sample []string) (string, string, bool) { return renderDelim(sample, '\t', "structured:TSV") },
+	Likely: func(js *jsonSample) bool { return looksLikeDelim(js, '\t') },
+	Render: func(js *jsonSample) (string, string, bool) { return renderDelim(js, '\t', "structured:TSV") },
 }
 
-func looksLikeDelim(sample []string, delim rune) bool {
-	if len(sample) < 2 {
+func looksLikeDelim(js *jsonSample, delim rune) bool {
+	if js.Count() < 2 {
 		return false
 	}
-	rdr := csv.NewReader(strings.NewReader(strings.Join(sample, "\n")))
+	rdr := csv.NewReader(strings.NewReader(strings.Join(js.Lines(), "\n")))
 	rdr.Comma = delim
 	rdr.FieldsPerRecord = -1
 	rdr.LazyQuotes = true
@@ -807,12 +806,12 @@ func looksLikeDelim(sample []string, delim rune) bool {
 	return float64(bestCount)/float64(rows) >= 0.95
 }
 
-func renderDelim(sample []string, delim rune, source string) (string, string, bool) {
-	rdr := csv.NewReader(strings.NewReader(strings.Join(sample, "\n")))
+func renderDelim(js *jsonSample, delim rune, source string) (string, string, bool) {
+	rdr := csv.NewReader(strings.NewReader(strings.Join(js.Lines(), "\n")))
 	rdr.Comma = delim
 	rdr.FieldsPerRecord = -1
 	rdr.LazyQuotes = true
-	rows := make([][]string, 0, len(sample))
+	rows := make([][]string, 0, js.Count())
 	for {
 		rec, err := rdr.Read()
 		if err != nil {

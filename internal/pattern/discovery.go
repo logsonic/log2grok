@@ -372,12 +372,13 @@ func normalizeLines(lines []string) normalizedInput {
 }
 
 func tryStructured(sample, all []string, diag io.Writer, ctl *scanCtl) *DiscoveredPattern {
+	js := newJSONSample(sample)
 	var best *DiscoveredPattern
 	for _, probe := range structuredProbes {
-		if !probe.Likely(sample) {
+		if !probe.Likely(js) {
 			continue
 		}
-		grok, source, ok := probe.Render(sample)
+		grok, source, ok := probe.Render(js)
 		if !ok {
 			continue
 		}
