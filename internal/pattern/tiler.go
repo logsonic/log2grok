@@ -1057,7 +1057,11 @@ func relaxTail(best *tileCandidate, eval []string) *tileCandidate {
 		if err != nil {
 			continue
 		}
-		matched := EvaluateCoverage(re, eval)
+		// Floor-prune: a cut that cannot strictly beat best.Matched+margin
+		// bails out mid-scan instead of completing a full coverage pass.
+		// Accepted candidates always carry exact counts (pruning only fires
+		// when the true count is <= floor; see coverage.go).
+		matched := evaluateCoverageWithFloor(re, eval, best.Matched+margin-1)
 		if matched-best.Matched < margin {
 			continue
 		}
