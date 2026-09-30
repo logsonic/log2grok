@@ -54,7 +54,7 @@ func TestTiledUnionDoesNotConsumeSkippedBranchMatches(t *testing.T) {
 		},
 	}
 
-	dp := tiledUnion(shapes, eval, 0.75, io.Discard)
+	dp := tiledUnion(shapes, eval, 0.75, io.Discard, nil)
 	if dp == nil {
 		t.Fatal("tiledUnion returned nil; skipped branch consumed new6")
 	}
@@ -80,7 +80,7 @@ func TestRelaxTailAcceptsMinimumGain(t *testing.T) {
 		},
 	}
 
-	relaxed := relaxTail(best, eval)
+	relaxed := relaxTail(best, eval, nil)
 	if relaxed == nil {
 		t.Fatal("relaxTail rejected an exact minimum-gain improvement")
 	}
@@ -106,7 +106,7 @@ func TestTextEnvelopeSkipsWeakFullInputCoverage(t *testing.T) {
 		`unrelated six`,
 	)
 
-	if dp := tryTextEnvelope(sample, all, io.Discard); dp != nil {
+	if dp := tryTextEnvelope(sample, all, io.Discard, nil); dp != nil {
 		t.Fatalf("tryTextEnvelope returned weak candidate coverage %.3f", dp.Coverage)
 	}
 }
@@ -122,12 +122,12 @@ func TestRelaxTailFindsCoverageGain(t *testing.T) {
 		"2025-01-15T10:23:49Z INFO bye",
 	}
 	sample := eval
-	shapes := tileShapes(sample, eval, tileShapeTemplates)
-	best := bestTiling(shapes, eval)
+	shapes := tileShapes(sample, eval, tileShapeTemplates, nil)
+	best := bestTiling(shapes, eval, nil)
 	if best == nil {
 		t.Fatal("no tiling")
 	}
-	relaxed := relaxTail(best, eval)
+	relaxed := relaxTail(best, eval, nil)
 	// Either no relaxation buys >=2% (acceptable), or the relaxed candidate
 	// strictly beats best and carries a GREEDYDATA message tail.
 	if relaxed != nil {

@@ -58,6 +58,23 @@ var ErrEmptyInput = errors.New("log2grok: no non-empty input lines")
 //     ranking is preserved.
 var coverageEvalCap = 50000
 
+// stageAbortHook, if non-nil, is called with the lower stage's name each
+// time the coordinator aborts that stage because a higher-priority stage
+// auto-accepted. Test-only instrumentation; production code never sets it.
+// Unlike scanAbortHook (which fires only when an in-flight scan happens to
+// observe the cancellation), this records the coordinator's decision, so it
+// is deterministic.
+var stageAbortHook func(stage string)
+
+// abortStage cancels a lower-priority stage's scans and, in tests, reports
+// the decision. See the cancellation rule in Discover.
+func abortStage(ctl *scanCtl, name string) {
+	ctl.abort()
+	if stageAbortHook != nil {
+		stageAbortHook(name)
+	}
+}
+
 // Discover returns the single best Grok pattern for the input lines.
 func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 	considered, truncated := limitLines(lines, opts.MaxLines)
@@ -98,10 +115,12 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 	// not finish order: we read results in priority order and short-circuit
 	// the moment a higher-priority stage clears its threshold. Lower-priority
 	// goroutines still run to completion in the background — their channels
-	// are buffered (capacity 1) so they exit cleanly without being read.
+	// are buffered (capacity 1) so they exit cleanly without being read —
+	// but they are cancelled first so their in-flight scans stop early.
 	structuredCh := make(chan stageResult, 1)
 	libraryCh := make(chan stageResult, 1)
 	envelopeCh := make(chan stageResult, 1)
+	ctlStructured, ctlLibrary, ctlInferred := newScanCtl(), newScanCtl(), newScanCtl()
 
 	// Stage 1 — structured log formats such as (JSON / logfmt / CEF / W3C / CSV / TSV).
 	// Auto-accepts only when the candidate has at least one typed capture,
@@ -109,7 +128,7 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 	// it can't pre-empt the more informative library/inferred stages.
 	go func() {
 		var buf bytes.Buffer
-		dp := tryStructured(sample, evalSet, &buf)
+		dp := tryStructured(sample, evalSet, &buf, ctlStructured)
 		accept := dp != nil && dp.Coverage >= threshold && structuredHasTypedCapture(dp)
 		if accept {
 			fmt.Fprintf(&buf, "stage1 structured auto-accept: %s coverage=%.3f\n", dp.Source, dp.Coverage)
@@ -121,7 +140,7 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 	// the top candidates re-evaluated against the full input.
 	go func() {
 		var buf bytes.Buffer
-		dp := tryLibrary(sample, evalSet, threshold, &buf)
+		dp := tryLibrary(sample, evalSet, threshold, &buf, ctlLibrary)
 		accept := dp != nil && dp.Coverage >= threshold
 		if accept {
 			fmt.Fprintf(&buf, "stage2 library auto-accept: %s coverage=%.3f\n", dp.Source, dp.Coverage)
@@ -138,7 +157,7 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 	// patterns keep priority.
 	go func() {
 		var buf bytes.Buffer
-		dp := pickBetter(tryTiling(sample, evalSet, &buf), tryTextEnvelope(sample, evalSet, &buf))
+		dp := pickBetter(tryTiling(sample, evalSet, &buf, ctlInferred), tryTextEnvelope(sample, evalSet, &buf, ctlInferred))
 		accept := dp != nil && dp.Coverage >= threshold
 		if accept {
 			fmt.Fprintf(&buf, "stage3 inferred auto-accept: %s coverage=%.3f\n", dp.Source, dp.Coverage)
@@ -147,16 +166,21 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 	}()
 
 	// Read in priority order. Auto-accept of an earlier stage wins
-	// regardless of which goroutine actually finished first.
+	// regardless of which goroutine actually finished first. When a higher
+	// stage auto-accepts, the lower stages' ctl tokens are aborted so their
+	// in-flight scans stop early; their results are discarded.
 
 	structured := <-structuredCh
 	if structured.autoAccept {
+		abortStage(ctlLibrary, "library")
+		abortStage(ctlInferred, "inferred")
 		flushDiag(diag, structured.diag)
 		return finalize(structured.candidate, total, len(evalSet), estimated, truncated), nil
 	}
 
 	library := <-libraryCh
 	if library.autoAccept {
+		abortStage(ctlInferred, "inferred")
 		flushDiag(diag, structured.diag, library.diag)
 		return finalize(library.candidate, total, len(evalSet), estimated, truncated), nil
 	}
@@ -329,7 +353,7 @@ func normalizeLines(lines []string) normalizedInput {
 	return out
 }
 
-func tryStructured(sample, all []string, diag io.Writer) *DiscoveredPattern {
+func tryStructured(sample, all []string, diag io.Writer, ctl *scanCtl) *DiscoveredPattern {
 	var best *DiscoveredPattern
 	for _, probe := range structuredProbes {
 		if !probe.Likely(sample) {
@@ -344,7 +368,7 @@ func tryStructured(sample, all []string, diag io.Writer) *DiscoveredPattern {
 			fmt.Fprintf(diag, "structured probe %s: compile failed: %v\n", probe.Name, err)
 			continue
 		}
-		matched := EvaluateCoverage(re, all)
+		matched := evaluateCoverageCtl(re, all, ctl)
 		dp := &DiscoveredPattern{
 			Source:       source,
 			SourceFamily: "structured",
@@ -359,7 +383,7 @@ func tryStructured(sample, all []string, diag io.Writer) *DiscoveredPattern {
 	return best
 }
 
-func tryLibrary(sample, all []string, threshold float64, diag io.Writer) *DiscoveredPattern {
+func tryLibrary(sample, all []string, threshold float64, diag io.Writer, ctl *scanCtl) *DiscoveredPattern {
 	candidates := scoreLibraryOnSample(sample)
 	candidates = keepTopCandidates(candidates, 12)
 
@@ -385,7 +409,7 @@ func tryLibrary(sample, all []string, threshold float64, diag io.Writer) *Discov
 		if best != nil {
 			floor = best.Matched
 		}
-		matched := evaluateCoverageWithFloor(c.Compiled, all, floor)
+		matched := evaluateCoverageWithFloorCtl(c.Compiled, all, floor, ctl)
 		result := &candidateResult{
 			Pattern:   c.Pattern,
 			Compiled:  c.Compiled,
@@ -473,12 +497,12 @@ func DiscoverTopK(lines []string, k int, opts Options) ([]*DiscoveredPattern, er
 
 	// If the library was thin, top up with a structured candidate.
 	if len(out) < k {
-		if s := tryStructured(sample, evalSet, io.Discard); s != nil {
+		if s := tryStructured(sample, evalSet, io.Discard, nil); s != nil {
 			out = append(out, finalize(s, total, len(evalSet), estimated, truncated))
 		}
 	}
 	if len(out) < k {
-		if e := pickBetter(tryTiling(sample, evalSet, io.Discard), tryTextEnvelope(sample, evalSet, io.Discard)); e != nil {
+		if e := pickBetter(tryTiling(sample, evalSet, io.Discard, nil), tryTextEnvelope(sample, evalSet, io.Discard, nil)); e != nil {
 			out = append(out, finalize(e, total, len(evalSet), estimated, truncated))
 		}
 	}

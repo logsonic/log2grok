@@ -73,7 +73,7 @@ func inferTextEnvelope(sample []string) (string, bool) {
 	return best.Grok, true
 }
 
-func tryTextEnvelope(sample, all []string, diag io.Writer) *DiscoveredPattern {
+func tryTextEnvelope(sample, all []string, diag io.Writer, ctl *scanCtl) *DiscoveredPattern {
 	grok, ok := inferTextEnvelope(sample)
 	if !ok {
 		return nil
@@ -83,7 +83,7 @@ func tryTextEnvelope(sample, all []string, diag io.Writer) *DiscoveredPattern {
 		fmt.Fprintf(diag, "text envelope: compile failed: %v\n", err)
 		return nil
 	}
-	matched := EvaluateCoverage(re, all)
+	matched := evaluateCoverageCtl(re, all, ctl)
 	cov := ratio(matched, len(all))
 	if cov < textEnvelopeMinCoverage {
 		fmt.Fprintf(diag, "text envelope: skipped weak candidate matched=%d/%d coverage=%.3f < %.2f\n",

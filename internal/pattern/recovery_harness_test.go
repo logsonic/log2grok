@@ -157,7 +157,7 @@ func isStructuredCase(input []string, expected string) bool {
 	if strings.Contains(expected, `%{GREEDYDATA:json}`) {
 		return true
 	}
-	if s := tryStructured(input, input, io.Discard); s != nil && s.Coverage >= 0.9 {
+	if s := tryStructured(input, input, io.Discard, nil); s != nil && s.Coverage >= 0.9 {
 		return true
 	}
 	return false
@@ -207,7 +207,7 @@ func TestFieldRecoveryHarness(t *testing.T) {
 		}
 
 		r := row{name: name, expHi: len(hiClassSeq(expected))}
-		if tc := tryTiling(input, input, io.Discard); tc != nil {
+		if tc := tryTiling(input, input, io.Discard, nil); tc != nil {
 			r.rec, _, r.over = recovery(expected, tc.Grok)
 		} else {
 			r.nilTile = true

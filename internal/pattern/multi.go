@@ -186,14 +186,14 @@ func buildMultiCandidates(sample, evalSet []string, diag io.Writer) []*multiCand
 	}
 
 	// Structured: a single best probe, excluding the keyless JSON skeleton.
-	if s := tryStructured(sample, evalSet, io.Discard); s != nil && structuredHasTypedCapture(s) {
+	if s := tryStructured(sample, evalSet, io.Discard, nil); s != nil && structuredHasTypedCapture(s) {
 		if re, err := CompileGrok(s.Grok, s.CustomPatterns); err == nil {
 			add(s, re, familyRank("structured"), typedCaptureCount(s.Grok), 0)
 		}
 	}
 
 	// Text envelope: the fast fixed-shape inference probe.
-	if e := tryTextEnvelope(sample, evalSet, io.Discard); e != nil {
+	if e := tryTextEnvelope(sample, evalSet, io.Discard, nil); e != nil {
 		if re, err := CompileGrok(e.Grok, e.CustomPatterns); err == nil {
 			add(e, re, familyRank("inferred"), typedCaptureCount(e.Grok), 0)
 		}
@@ -202,7 +202,7 @@ func buildMultiCandidates(sample, evalSet []string, diag io.Writer) []*multiCand
 	// Tiler: one pattern per distinct line shape — the engine's clustering.
 	// A shape must explain at least two lines and carry a high-confidence
 	// field; that keeps literal one-off lines out of the pool.
-	for i, c := range tileShapes(sample, evalSet, tileShapeTemplates) {
+	for i, c := range tileShapes(sample, evalSet, tileShapeTemplates, nil) {
 		if c.Matched < tiledUnionMinBranchLines || c.Promoted < tilingMinPromoted {
 			continue
 		}

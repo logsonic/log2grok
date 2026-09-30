@@ -951,7 +951,7 @@ type tileCandidate struct {
 
 // buildTiling tiles one template line against the sample population and
 // scores the result against eval. Returns nil if it produces no usable grok.
-func buildTiling(template string, sample, eval []string) *tileCandidate {
+func buildTiling(template string, sample, eval []string, ctl *scanCtl) *tileCandidate {
 	pieces, ok := tileInferPieces(template, sample, 0)
 	if !ok {
 		return nil
@@ -964,7 +964,7 @@ func buildTiling(template string, sample, eval []string) *tileCandidate {
 	if !re.MatchString(template) {
 		return nil
 	}
-	matched := EvaluateCoverage(re, eval)
+	matched := evaluateCoverageCtl(re, eval, ctl)
 	if matched == 0 {
 		return nil
 	}
@@ -988,11 +988,11 @@ const tileShapeTemplates = 16
 // cost. This is the tiler's clustering: each shape's relaxed probe only
 // matches the lines that share its literal skeleton, so each candidate is
 // typed by exactly its own population.
-func tileShapes(sample, eval []string, maxTemplates int) []*tileCandidate {
+func tileShapes(sample, eval []string, maxTemplates int, ctl *scanCtl) []*tileCandidate {
 	templates := pickTemplateLines(sample, maxTemplates)
 	var out []*tileCandidate
 	for _, t := range templates {
-		if c := buildTiling(t, sample, eval); c != nil {
+		if c := buildTiling(t, sample, eval, ctl); c != nil {
 			out = append(out, c)
 		}
 	}
@@ -1001,7 +1001,7 @@ func tileShapes(sample, eval []string, maxTemplates int) []*tileCandidate {
 
 // bestTiling picks the strongest shape, relaxing its tail when that buys
 // real coverage.
-func bestTiling(shapes []*tileCandidate, eval []string) *tileCandidate {
+func bestTiling(shapes []*tileCandidate, eval []string, ctl *scanCtl) *tileCandidate {
 	var best *tileCandidate
 	for _, c := range shapes {
 		if betterTiling(c, best) {
@@ -1012,7 +1012,7 @@ func bestTiling(shapes []*tileCandidate, eval []string) *tileCandidate {
 		return nil
 	}
 	if best.Matched < len(eval) {
-		if relaxed := relaxTail(best, eval); relaxed != nil {
+		if relaxed := relaxTail(best, eval, ctl); relaxed != nil {
 			best = relaxed
 		}
 	}
@@ -1032,7 +1032,7 @@ const relaxTailMaxCuts = 24
 // with " | "); on equal coverage the longest prefix wins. The relaxation
 // must buy a real coverage gain (≥2% of eval, min 1 line) so a uniform
 // input keeps its fully-typed pattern.
-func relaxTail(best *tileCandidate, eval []string) *tileCandidate {
+func relaxTail(best *tileCandidate, eval []string, ctl *scanCtl) *tileCandidate {
 	margin := max(len(eval)/50, 1)
 	var bestVar *tileCandidate
 	promoted := 0
@@ -1061,7 +1061,7 @@ func relaxTail(best *tileCandidate, eval []string) *tileCandidate {
 		// bails out mid-scan instead of completing a full coverage pass.
 		// Accepted candidates always carry exact counts (pruning only fires
 		// when the true count is <= floor; see coverage.go).
-		matched := evaluateCoverageWithFloor(re, eval, best.Matched+margin-1)
+		matched := evaluateCoverageWithFloorCtl(re, eval, best.Matched+margin-1, ctl)
 		if matched-best.Matched < margin {
 			continue
 		}
@@ -1217,7 +1217,7 @@ func literalKeywords(pieces []tilePiece) int {
 // shape explains the input. Shapes are taken in descending matched order;
 // each must newly explain at least tiledUnionMinBranchLines lines and carry
 // a high-confidence field.
-func tiledUnion(shapes []*tileCandidate, eval []string, bestCov float64, diag io.Writer) *DiscoveredPattern {
+func tiledUnion(shapes []*tileCandidate, eval []string, bestCov float64, diag io.Writer, ctl *scanCtl) *DiscoveredPattern {
 	if len(shapes) < 2 {
 		return nil
 	}
@@ -1270,7 +1270,7 @@ func tiledUnion(shapes []*tileCandidate, eval []string, bestCov float64, diag io
 		fmt.Fprintf(diag, "tiling union: failed to compile: %v\n", err)
 		return nil
 	}
-	matched := EvaluateCoverage(re, eval)
+	matched := evaluateCoverageCtl(re, eval, ctl)
 	cov := ratio(matched, len(eval))
 	fmt.Fprintf(diag, "tiling union: branches=%d matched=%d/%d coverage=%.3f (best single=%.3f)\n",
 		len(branches), matched, len(eval), cov, bestCov)
@@ -1288,13 +1288,13 @@ func tiledUnion(shapes []*tileCandidate, eval []string, bestCov float64, diag io
 }
 
 // tryTiling is the stage entry point, mirroring tryStructured/tryTextEnvelope.
-func tryTiling(sample, all []string, diag io.Writer) *DiscoveredPattern {
+func tryTiling(sample, all []string, diag io.Writer, ctl *scanCtl) *DiscoveredPattern {
 	if len(all) < tilingMinLines {
 		fmt.Fprintf(diag, "tiling: skipped, %d lines < %d evidence floor\n", len(all), tilingMinLines)
 		return nil
 	}
-	shapes := tileShapes(sample, all, tileShapeTemplates)
-	cand := bestTiling(shapes, all)
+	shapes := tileShapes(sample, all, tileShapeTemplates, ctl)
+	cand := bestTiling(shapes, all, ctl)
 	if cand == nil {
 		return nil
 	}
@@ -1302,7 +1302,7 @@ func tryTiling(sample, all []string, diag io.Writer) *DiscoveredPattern {
 	// No single shape explains the input: try a union of complementary
 	// shapes before giving up (small multi-format streams).
 	if cov < tiledUnionTrigger {
-		if u := tiledUnion(shapes, all, cov, diag); u != nil {
+		if u := tiledUnion(shapes, all, cov, diag, ctl); u != nil {
 			return u
 		}
 	}
