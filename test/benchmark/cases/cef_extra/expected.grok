@@ -1,0 +1,1 @@
+(?:%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} )?CEF:%{INT:cef_version}\|%{DATA:vendor}\|%{DATA:product}\|%{DATA:product_version}\|%{DATA:signature}\|%{DATA:name}\|%{DATA:severity}\|%{GREEDYDATA:extensions}

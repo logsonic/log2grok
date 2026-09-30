@@ -1,0 +1,6 @@
+{
+  "case_name": "apache_common_extra",
+  "expected_grok": "%{IPORHOST:client_ip} %{USER:ident} %{USER:auth} \\[%{HTTPDATE:timestamp}\\] \"%{WORD:method} %{NOTSPACE:url}(?: HTTP/%{NUMBER:http_version})?\" %{INT:status} (?:%{INT:bytes}|-)",
+  "expected_source": "library:Apache Common",
+  "family": "apache_common"
+}

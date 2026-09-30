@@ -1,0 +1,6 @@
+{
+  "case_name": "heroku_router_extra",
+  "expected_grok": "%{GREEDYDATA:kvpairs}",
+  "expected_source": "structured:logfmt",
+  "family": "heroku_router"
+}

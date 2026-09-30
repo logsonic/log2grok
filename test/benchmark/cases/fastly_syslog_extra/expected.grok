@@ -1,0 +1,1 @@
+<%{INT:priority}>%{TIMESTAMP_ISO8601:timestamp} %{NOTSPACE:cache} %{NOTSPACE:service} %{IP:client_ip} %{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version} %{INT:status} %{INT:bytes}

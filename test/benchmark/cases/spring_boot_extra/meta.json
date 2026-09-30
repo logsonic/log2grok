@@ -1,0 +1,6 @@
+{
+  "case_name": "spring_boot_extra",
+  "expected_grok": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+%{INT:pid}\\s+---\\s+\\[%{DATA:thread}\\]\\s+%{JAVACLASS:logger}\\s+:\\s+%{GREEDYDATA:message}",
+  "expected_source": "library:Spring Boot Default",
+  "family": "spring_boot"
+}

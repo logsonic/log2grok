@@ -1,0 +1,6 @@
+{
+  "case_name": "cockroach_start",
+  "expected_grok": "I241010 %{TIME:time} %{INT:n} server/server\\.go:%{INT:n_2} \\[%{WORD:word}\\] started with engine type pebble",
+  "expected_source": "inferred:Tiled",
+  "family": "cockroach"
+}

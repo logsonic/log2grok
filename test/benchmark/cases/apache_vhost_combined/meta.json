@@ -1,0 +1,6 @@
+{
+  "case_name": "apache_vhost_combined",
+  "expected_grok": "%{IPORHOST:vhost}:%{INT:vhost_port} %{IPORHOST:client_ip} %{USER:ident} %{USER:auth} \\[%{HTTPDATE:timestamp}\\] \"%{WORD:method} %{NOTSPACE:url}(?: HTTP/%{NUMBER:http_version})?\" %{INT:status} (?:%{INT:bytes}|-) \"%{DATA:referrer}\" \"%{DATA:user_agent}\"",
+  "expected_source": "library:Apache Vhost Combined",
+  "family": "apache_vhost"
+}

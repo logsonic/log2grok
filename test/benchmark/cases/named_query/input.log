@@ -1,0 +1,15 @@
+10-Oct-2024 13:00:00.000 queries: info: client @0x7f0000 10.0.0.0#50000: query: example.com IN A +
+10-Oct-2024 13:00:01.001 queries: info: client @0x7f0001 10.0.0.1#50001: query: example.com IN A +
+10-Oct-2024 13:00:02.002 queries: info: client @0x7f0002 10.0.0.2#50002: query: example.com IN A +
+10-Oct-2024 13:00:03.003 queries: info: client @0x7f0003 10.0.0.3#50003: query: example.com IN A +
+10-Oct-2024 13:00:04.004 queries: info: client @0x7f0004 10.0.0.4#50004: query: example.com IN A +
+10-Oct-2024 13:00:05.005 queries: info: client @0x7f0005 10.0.0.5#50005: query: example.com IN A +
+10-Oct-2024 13:00:06.006 queries: info: client @0x7f0006 10.0.0.6#50006: query: example.com IN A +
+10-Oct-2024 13:00:07.007 queries: info: client @0x7f0007 10.0.0.7#50007: query: example.com IN A +
+10-Oct-2024 13:00:08.008 queries: info: client @0x7f0008 10.0.0.8#50008: query: example.com IN A +
+10-Oct-2024 13:00:09.009 queries: info: client @0x7f0009 10.0.0.9#50009: query: example.com IN A +
+10-Oct-2024 13:00:10.010 queries: info: client @0x7f0010 10.0.0.10#500010: query: example.com IN A +
+10-Oct-2024 13:00:11.011 queries: info: client @0x7f0011 10.0.0.11#500011: query: example.com IN A +
+10-Oct-2024 13:00:12.012 queries: info: client @0x7f0012 10.0.0.12#500012: query: example.com IN A +
+10-Oct-2024 13:00:13.013 queries: info: client @0x7f0013 10.0.0.13#500013: query: example.com IN A +
+10-Oct-2024 13:00:14.014 queries: info: client @0x7f0014 10.0.0.14#500014: query: example.com IN A +

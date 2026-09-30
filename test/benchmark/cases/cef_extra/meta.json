@@ -1,0 +1,6 @@
+{
+  "case_name": "cef_extra",
+  "expected_grok": "(?:%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} )?CEF:%{INT:cef_version}\\|%{DATA:vendor}\\|%{DATA:product}\\|%{DATA:product_version}\\|%{DATA:signature}\\|%{DATA:name}\\|%{DATA:severity}\\|%{GREEDYDATA:extensions}",
+  "expected_source": "structured:CEF",
+  "family": "cef"
+}

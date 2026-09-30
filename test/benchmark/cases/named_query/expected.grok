@@ -1,0 +1,1 @@
+%{MONTHDAY:monthday}-%{MONTH:month}-%{YEAR:year} %{TIME:time} queries: %{LOGLEVEL:queries}: client %{NOTSPACE:value} %{IPV4:ip}#%{INT:n}: query: example\.com IN A \+

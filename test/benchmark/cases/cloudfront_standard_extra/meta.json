@@ -1,0 +1,6 @@
+{
+  "case_name": "cloudfront_standard_extra",
+  "expected_grok": "[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*",
+  "expected_source": "structured:TSV",
+  "family": "cloudfront"
+}

@@ -1,0 +1,6 @@
+{
+  "case_name": "dmesg_extra",
+  "expected_grok": "\\[%{NUMBER:n}\\] usb %{NOTSPACE:value} new high-speed USB device number %{INT:n_2} using xhci_hcd",
+  "expected_source": "inferred:Tiled",
+  "family": "dmesg"
+}

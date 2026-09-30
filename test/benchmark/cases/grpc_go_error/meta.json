@@ -1,0 +1,6 @@
+{
+  "case_name": "grpc_go_error",
+  "expected_grok": "%{YEAR:year}/%{MONTHNUM2:month}/%{MONTHDAY2:monthday} %{TIME:time} grpc: addrConn\\.createTransport failed to connect to \\{addr: \"%{IPV4:ip}:%{INT:n}\"\\}",
+  "expected_source": "inferred:Tiled",
+  "family": "grpc_go"
+}

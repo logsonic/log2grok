@@ -1,0 +1,1 @@
+\{\s*"ts"\s*:\s*%{NUMBER:timestamp}\s*,\s*"level"\s*:\s*%{QUOTEDSTRING:level}\s*,\s*"errSymbol"\s*:\s*%{QUOTEDSTRING:errsymbol}\s*,\s*"errCode"\s*:\s*%{NUMBER:errcode}\s*,\s*"thread"\s*:\s*%{NUMBER:thread}\s*,\s*"msg"\s*:\s*%{QUOTEDSTRING:message}\s*\}

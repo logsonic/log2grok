@@ -1,0 +1,6 @@
+{
+  "case_name": "hadoop_extra",
+  "expected_grok": "%{TIMESTAMP_ISO8601:timestamp} %{LOGLEVEL:level} \\[%{DATA:thread}\\] %{JAVACLASS:logger}: %{GREEDYDATA:message}",
+  "expected_source": "library:Hadoop",
+  "family": "hadoop"
+}

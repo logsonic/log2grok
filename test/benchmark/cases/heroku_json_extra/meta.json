@@ -1,0 +1,6 @@
+{
+  "case_name": "heroku_json_extra",
+  "expected_grok": "\\{\\s*\"log\"\\s*:\\s*%{QUOTEDSTRING:message}\\s*,\\s*\"stream\"\\s*:\\s*%{QUOTEDSTRING:stream}\\s*,\\s*\"time\"\\s*:\\s*%{QUOTEDSTRING:timestamp}\\s*\\}",
+  "expected_source": "structured:Docker JSON",
+  "family": "heroku_json"
+}

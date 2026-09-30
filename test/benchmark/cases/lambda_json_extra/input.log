@@ -1,0 +1,15 @@
+{"time": "2024-10-10T13:00:00.000Z", "type": "platform.report", "record": {"requestId": "req-0", "status": "success", "metrics": {"durationMs": 1.0}}}
+{"time": "2024-10-11T13:01:07.001Z", "type": "platform.report", "record": {"requestId": "req-1", "status": "success", "metrics": {"durationMs": 2.0}}}
+{"time": "2024-10-12T13:02:14.002Z", "type": "platform.report", "record": {"requestId": "req-2", "status": "success", "metrics": {"durationMs": 3.0}}}
+{"time": "2024-10-13T13:03:21.003Z", "type": "platform.report", "record": {"requestId": "req-3", "status": "success", "metrics": {"durationMs": 4.0}}}
+{"time": "2024-10-14T13:04:28.004Z", "type": "platform.report", "record": {"requestId": "req-4", "status": "success", "metrics": {"durationMs": 5.0}}}
+{"time": "2024-10-15T13:05:35.005Z", "type": "platform.report", "record": {"requestId": "req-5", "status": "success", "metrics": {"durationMs": 6.0}}}
+{"time": "2024-10-16T13:06:42.006Z", "type": "platform.report", "record": {"requestId": "req-6", "status": "success", "metrics": {"durationMs": 7.0}}}
+{"time": "2024-10-17T13:07:49.007Z", "type": "platform.report", "record": {"requestId": "req-7", "status": "success", "metrics": {"durationMs": 8.0}}}
+{"time": "2024-10-18T13:08:56.008Z", "type": "platform.report", "record": {"requestId": "req-8", "status": "success", "metrics": {"durationMs": 9.0}}}
+{"time": "2024-10-19T13:09:03.009Z", "type": "platform.report", "record": {"requestId": "req-9", "status": "success", "metrics": {"durationMs": 10.0}}}
+{"time": "2024-10-20T13:10:10.010Z", "type": "platform.report", "record": {"requestId": "req-10", "status": "success", "metrics": {"durationMs": 11.0}}}
+{"time": "2024-10-21T13:11:17.011Z", "type": "platform.report", "record": {"requestId": "req-11", "status": "success", "metrics": {"durationMs": 12.0}}}
+{"time": "2024-10-22T13:12:24.012Z", "type": "platform.report", "record": {"requestId": "req-12", "status": "success", "metrics": {"durationMs": 13.0}}}
+{"time": "2024-10-23T13:13:31.013Z", "type": "platform.report", "record": {"requestId": "req-13", "status": "success", "metrics": {"durationMs": 14.0}}}
+{"time": "2024-10-24T13:14:38.014Z", "type": "platform.report", "record": {"requestId": "req-14", "status": "success", "metrics": {"durationMs": 15.0}}}

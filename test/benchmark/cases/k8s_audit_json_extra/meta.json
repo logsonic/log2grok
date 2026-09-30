@@ -1,0 +1,6 @@
+{
+  "case_name": "k8s_audit_json_extra",
+  "expected_grok": "\\{\\s*\"kind\"\\s*:\\s*%{QUOTEDSTRING:kind}\\s*,\\s*\"apiVersion\"\\s*:\\s*%{QUOTEDSTRING:apiversion}\\s*,\\s*\"level\"\\s*:\\s*%{QUOTEDSTRING:level}\\s*,\\s*\"auditID\"\\s*:\\s*%{QUOTEDSTRING:auditid}\\s*,\\s*\"stage\"\\s*:\\s*%{QUOTEDSTRING:stage}\\s*,\\s*\"requestURI\"\\s*:\\s*%{QUOTEDSTRING:requesturi}\\s*,\\s*\"verb\"\\s*:\\s*%{QUOTEDSTRING:method}\\s*,\\s*\"user\"\\s*:\\s*%{DATA:user}\\s*\\}",
+  "expected_source": "structured:Kubernetes Audit JSON",
+  "family": "k8s_audit_json"
+}

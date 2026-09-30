@@ -1,0 +1,6 @@
+{
+  "case_name": "windows_event_json_extra",
+  "expected_grok": "\\{\\s*\"EventID\"\\s*:\\s*%{NUMBER:eventid}\\s*,\\s*\"Provider\"\\s*:\\s*%{QUOTEDSTRING:provider}\\s*,\\s*\"TimeCreated\"\\s*:\\s*%{QUOTEDSTRING:timecreated}\\s*,\\s*\"Level\"\\s*:\\s*%{NUMBER:level}\\s*,\\s*\"Message\"\\s*:\\s*%{QUOTEDSTRING:message}\\s*\\}",
+  "expected_source": "structured:JSON Object",
+  "family": "windows_event_json"
+}

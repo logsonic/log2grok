@@ -1,0 +1,1 @@
+%{TIMESTAMP_ISO8601:timestamp}\s+%{DOCKER_ID:container_id}\s+%{NOTSPACE:container_name}\s+%{GREEDYDATA:message}

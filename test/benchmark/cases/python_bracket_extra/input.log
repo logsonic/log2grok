@@ -1,0 +1,15 @@
+[2024-10-10T13:00:00Z] [INFO] [worker_0:4000] processed message 0
+[2024-10-10T13:00:01Z] [INFO] [worker_1:4001] processed message 1
+[2024-10-10T13:00:02Z] [INFO] [worker_2:4002] processed message 2
+[2024-10-10T13:00:03Z] [INFO] [worker_3:4003] processed message 3
+[2024-10-10T13:00:04Z] [INFO] [worker_4:4004] processed message 4
+[2024-10-10T13:00:05Z] [INFO] [worker_5:4005] processed message 5
+[2024-10-10T13:00:06Z] [INFO] [worker_6:4006] processed message 6
+[2024-10-10T13:00:07Z] [INFO] [worker_7:4007] processed message 7
+[2024-10-10T13:00:08Z] [INFO] [worker_8:4008] processed message 8
+[2024-10-10T13:00:09Z] [INFO] [worker_9:4009] processed message 9
+[2024-10-10T13:00:10Z] [INFO] [worker_10:4010] processed message 10
+[2024-10-10T13:00:11Z] [INFO] [worker_11:4011] processed message 11
+[2024-10-10T13:00:12Z] [INFO] [worker_12:4012] processed message 12
+[2024-10-10T13:00:13Z] [INFO] [worker_13:4013] processed message 13
+[2024-10-10T13:00:14Z] [INFO] [worker_14:4014] processed message 14

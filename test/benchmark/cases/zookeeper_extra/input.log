@@ -1,0 +1,15 @@
+2024-10-10 13:00:00,000 [myid:1] - INFO  [main:ZooKeeperServer@0] - Created server with tickTime 0 ms
+2024-10-10 13:00:01,001 [myid:2] - INFO  [main:ZooKeeperServer@1] - Created server with tickTime 1 ms
+2024-10-10 13:00:02,002 [myid:3] - INFO  [main:ZooKeeperServer@2] - Created server with tickTime 2 ms
+2024-10-10 13:00:03,003 [myid:1] - INFO  [main:ZooKeeperServer@3] - Created server with tickTime 3 ms
+2024-10-10 13:00:04,004 [myid:2] - INFO  [main:ZooKeeperServer@4] - Created server with tickTime 4 ms
+2024-10-10 13:00:05,005 [myid:3] - INFO  [main:ZooKeeperServer@5] - Created server with tickTime 5 ms
+2024-10-10 13:00:06,006 [myid:1] - INFO  [main:ZooKeeperServer@6] - Created server with tickTime 6 ms
+2024-10-10 13:00:07,007 [myid:2] - INFO  [main:ZooKeeperServer@7] - Created server with tickTime 7 ms
+2024-10-10 13:00:08,008 [myid:3] - INFO  [main:ZooKeeperServer@8] - Created server with tickTime 8 ms
+2024-10-10 13:00:09,009 [myid:1] - INFO  [main:ZooKeeperServer@9] - Created server with tickTime 9 ms
+2024-10-10 13:00:10,010 [myid:2] - INFO  [main:ZooKeeperServer@10] - Created server with tickTime 10 ms
+2024-10-10 13:00:11,011 [myid:3] - INFO  [main:ZooKeeperServer@11] - Created server with tickTime 11 ms
+2024-10-10 13:00:12,012 [myid:1] - INFO  [main:ZooKeeperServer@12] - Created server with tickTime 12 ms
+2024-10-10 13:00:13,013 [myid:2] - INFO  [main:ZooKeeperServer@13] - Created server with tickTime 13 ms
+2024-10-10 13:00:14,014 [myid:3] - INFO  [main:ZooKeeperServer@14] - Created server with tickTime 14 ms

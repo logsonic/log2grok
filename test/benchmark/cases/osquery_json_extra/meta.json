@@ -1,0 +1,6 @@
+{
+  "case_name": "osquery_json_extra",
+  "expected_grok": "\\{\\s*\"name\"\\s*:\\s*%{QUOTEDSTRING:logger}\\s*,\\s*\"hostIdentifier\"\\s*:\\s*%{QUOTEDSTRING:hostidentifier}\\s*,\\s*\"calendarTime\"\\s*:\\s*%{QUOTEDSTRING:calendartime}\\s*,\\s*\"unixTime\"\\s*:\\s*%{NUMBER:unixtime}\\s*,\\s*\"action\"\\s*:\\s*%{QUOTEDSTRING:action}\\s*,\\s*\"columns\"\\s*:\\s*%{DATA:columns}\\s*\\}",
+  "expected_source": "structured:JSON Object",
+  "family": "osquery_json"
+}
