@@ -119,6 +119,9 @@ func TestDiscoverSuccess(t *testing.T) {
 	if resp.Pattern.Matched == 0 {
 		t.Fatal("pattern.matched = 0, want > 0")
 	}
+	if resp.Pattern.Coverage <= 0 || resp.Pattern.Coverage > 1 {
+		t.Fatalf("pattern.coverage = %v, want (0,1]", resp.Pattern.Coverage)
+	}
 }
 
 // jsonString encodes s as a JSON string literal for building request bodies.
@@ -251,4 +254,46 @@ func TestDiscoverConcurrent(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+func TestIndexMarkup(t *testing.T) {
+	body := get(t, "/").Body.String()
+	for _, needle := range []string{
+		`id="logs"`, `id="discover"`, `id="lineCount"`, `id="result"`,
+		`id="feedback"`, `id="copy"`, `/static/styles.css`, `/static/app.js`,
+		`id="result" class="result" role="status" aria-live="polite"`,
+	} {
+		if !strings.Contains(body, needle) {
+			t.Errorf("index is missing %s", needle)
+		}
+	}
+}
+
+func TestStylesServed(t *testing.T) {
+	rec := get(t, "/static/styles.css")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "text/css") {
+		t.Fatalf("Content-Type = %q, want text/css", ct)
+	}
+	body := rec.Body.String()
+	for _, needle := range []string{"--accent", "prefers-color-scheme", "prefers-reduced-motion"} {
+		if !strings.Contains(body, needle) {
+			t.Errorf("styles.css is missing %q", needle)
+		}
+	}
+}
+
+func TestAppServed(t *testing.T) {
+	rec := get(t, "/static/app.js")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, needle := range []string{"/api/discover", "data.error", "0.5", "EXAMPLES"} {
+		if !strings.Contains(body, needle) {
+			t.Errorf("app.js is missing %q", needle)
+		}
+	}
 }
