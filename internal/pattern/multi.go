@@ -294,15 +294,10 @@ func preferMultiCandidate(a, b *multiCandidate) bool {
 }
 
 // matchBitmap runs re over lines, returning a per-line hit bitmap and the
-// total hit count.
+// total hit count. The scan is parallel for large inputs (see scan.go);
+// workers write disjoint bitmap ranges, so no locking is needed.
 func matchBitmap(re *regexp.Regexp, lines []string) ([]bool, int) {
 	out := make([]bool, len(lines))
-	n := 0
-	for i, line := range lines {
-		if re.MatchString(line) {
-			out[i] = true
-			n++
-		}
-	}
+	n := scanMatchesInto(re, lines, out, nil)
 	return out, n
 }

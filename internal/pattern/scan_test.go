@@ -114,6 +114,29 @@ func TestScanAbortHook(t *testing.T) {
 	}
 }
 
+func TestMatchBitmapParallel(t *testing.T) {
+	old := parallelScanMinLines
+	parallelScanMinLines = 0
+	defer func() { parallelScanMinLines = old }()
+
+	re := regexp.MustCompile(`\d+`)
+	lines := deterministicLines(9000)
+	bitmap, count := matchBitmap(re, lines)
+	want := 0
+	for i, line := range lines {
+		match := re.MatchString(line)
+		if match {
+			want++
+		}
+		if bitmap[i] != match {
+			t.Fatalf("bitmap[%d]=%v, want %v", i, bitmap[i], match)
+		}
+	}
+	if count != want {
+		t.Fatalf("count=%d, want %d", count, want)
+	}
+}
+
 // The floor variant's callers only make strict-> decisions
 // (betterCandidate, relaxTail). Property: the returned value either equals
 // the exact count, or is <= floor; and the decision "count > floor" must
