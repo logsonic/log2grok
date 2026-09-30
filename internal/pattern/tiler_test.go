@@ -2,6 +2,7 @@ package pattern
 
 import (
 	"io"
+	"strings"
 	"testing"
 )
 
@@ -107,5 +108,34 @@ func TestTextEnvelopeSkipsWeakFullInputCoverage(t *testing.T) {
 
 	if dp := tryTextEnvelope(sample, all, io.Discard); dp != nil {
 		t.Fatalf("tryTextEnvelope returned weak candidate coverage %.3f", dp.Coverage)
+	}
+}
+
+// relaxTail must still find the relaxation that buys real coverage for a
+// rigid-prefix/varying-tail log, now that cut-point scans are floor-pruned.
+func TestRelaxTailFindsCoverageGain(t *testing.T) {
+	eval := []string{
+		"2025-01-15T10:23:45Z INFO worker started",
+		"2025-01-15T10:23:46Z INFO job 1 done",
+		"2025-01-15T10:23:47Z INFO job 2 done",
+		"2025-01-15T10:23:48Z INFO shutdown",
+		"2025-01-15T10:23:49Z INFO bye",
+	}
+	sample := eval
+	shapes := tileShapes(sample, eval, tileShapeTemplates)
+	best := bestTiling(shapes, eval)
+	if best == nil {
+		t.Fatal("no tiling")
+	}
+	relaxed := relaxTail(best, eval)
+	// Either no relaxation buys >=2% (acceptable), or the relaxed candidate
+	// strictly beats best and carries a GREEDYDATA message tail.
+	if relaxed != nil {
+		if relaxed.Matched <= best.Matched {
+			t.Fatalf("relaxed=%d must beat best=%d", relaxed.Matched, best.Matched)
+		}
+		if !strings.Contains(relaxed.Grok, "%{GREEDYDATA:message}") {
+			t.Fatalf("relaxed grok lacks message tail: %s", relaxed.Grok)
+		}
 	}
 }
