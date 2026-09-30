@@ -25,6 +25,45 @@ func TestTilerCachesResetAfterPrimitiveReplacement(t *testing.T) {
 	}
 }
 
+// Composite expression regexes are precompiled into a version-checked slice
+// parallel to tileComposites. They must match the old exprFullMatch behavior
+// and must be rebuilt when the primitive table changes (not cached stale).
+func TestCompositeExprsTrackPrimitiveReplacement(t *testing.T) {
+	t.Cleanup(restoreEmbeddedDefaults(t))
+
+	ensureCompExprs()
+	if len(compExprRe) != len(tileComposites) {
+		t.Fatalf("compExprRe len %d != tileComposites %d", len(compExprRe), len(tileComposites))
+	}
+	if compExprRe[1] == nil {
+		t.Fatal("ISO8601 composite expr failed to compile")
+	}
+	if !compExprRe[1].MatchString("2025-01-15T10:23:45Z") {
+		t.Fatal("ISO8601 composite does not match an ISO timestamp")
+	}
+
+	// A primitive-table replacement must advance the version and rebuild the
+	// cache, not serve a stale regex.
+	verBefore := compExprVer
+	primitives := GrokPrimitivesSnapshot()
+	primitives["TIMESTAMP_ISO8601"] = `NOT_A_TIMESTAMP`
+	ReplaceGrokPrimitives(primitives)
+	ensureCompExprs()
+	if compExprVer == verBefore {
+		t.Fatal("compExprVer did not advance after primitive replacement")
+	}
+	if compExprRe[1] != nil && compExprRe[1].MatchString("2025-01-15T10:23:45Z") {
+		t.Fatal("compExprRe[1] still uses the replaced TIMESTAMP_ISO8601 primitive")
+	}
+
+	// resetTilerCaches must clear and rebuild cleanly.
+	resetTilerCaches()
+	ensureCompExprs()
+	if len(compExprRe) != len(tileComposites) {
+		t.Fatalf("compExprRe len %d != tileComposites %d after reset", len(compExprRe), len(tileComposites))
+	}
+}
+
 func TestTiledUnionDoesNotConsumeSkippedBranchMatches(t *testing.T) {
 	eval := []string{
 		"common0 1",
