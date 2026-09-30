@@ -7,6 +7,8 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -67,6 +69,21 @@ type patternPayload struct {
 	Estimated    bool    `json:"estimated"`
 }
 
+// segment is one slice of an input line: a token capture, or the literal text
+// between captures. A line's segments concatenate to reproduce the line.
+type segment struct {
+	Text  string `json:"text"`
+	Token string `json:"token,omitempty"`
+	Field string `json:"field,omitempty"`
+}
+
+// linePayload is the per-line rendering model for the UI: whether the line
+// matched, and its token segments when the pattern names any fields.
+type linePayload struct {
+	Matched  bool      `json:"matched"`
+	Segments []segment `json:"segments"`
+}
+
 type metaPayload struct {
 	Lines     int   `json:"lines"`
 	ElapsedMs int64 `json:"elapsedMs"`
@@ -75,7 +92,7 @@ type metaPayload struct {
 type discoverResponse struct {
 	OK      bool           `json:"ok"`
 	Pattern patternPayload `json:"pattern"`
-	Matches []bool         `json:"matches"`
+	Lines   []linePayload  `json:"lines,omitempty"`
 	Meta    metaPayload    `json:"meta"`
 }
 
@@ -149,6 +166,157 @@ func classifyDiscoverError(err error) (int, string, string) {
 	return http.StatusInternalServerError, "internal", "Discovery failed: " + err.Error()
 }
 
+// --- token segments ---
+
+// Token segments are only computed within these bounds so a huge paste cannot
+// produce a huge JSON payload or DOM.
+const (
+	maxTokenLines = 2000
+	maxTokenBytes = 500000
+)
+
+// grokFieldRe mirrors the library's %{NAME}, %{NAME:field}, %{NAME:field:type}.
+var grokFieldRe = regexp.MustCompile(`%\{(\w+)(?::([\w.@-]+)(?::(\w+))?)?\}`)
+
+// buildLineTokens maps each input line to its token segments. Returns nil if
+// the pattern cannot be compiled (the UI then shows plain text).
+func buildLineTokens(grok string, extras map[string]string, lines []string) []linePayload {
+	re, err := l2g.CompileGrok(grok, extras)
+	if err != nil {
+		return nil
+	}
+	names := re.SubexpNames()
+	tokens := groupTokens(grok, names)
+
+	out := make([]linePayload, len(lines))
+	for i, line := range lines {
+		if line == "" {
+			out[i] = linePayload{Segments: []segment{{Text: ""}}}
+			continue
+		}
+		idx := re.FindStringSubmatchIndex(line)
+		if idx == nil {
+			out[i] = linePayload{Segments: []segment{{Text: line}}}
+			continue
+		}
+		out[i] = linePayload{Matched: true, Segments: segmentsFor(line, idx, names, tokens)}
+	}
+	return out
+}
+
+// groupTokens pairs each compiled subexpression name with the Grok primitive
+// referenced for that field. Duplicate field names are uniquified by the
+// compiler (e.g. n, n_2), so per-base queues keep the pairing in order.
+func groupTokens(grok string, names []string) []string {
+	queues := map[string][]string{}
+	for _, m := range grokFieldRe.FindAllStringSubmatch(grok, -1) {
+		if m[2] == "" {
+			continue
+		}
+		field := sanitizeField(m[2])
+		queues[field] = append(queues[field], m[1])
+	}
+	tokens := make([]string, len(names))
+	for g := 1; g < len(names); g++ {
+		name := names[g]
+		if name == "" {
+			continue
+		}
+		if q := queues[name]; len(q) > 0 {
+			tokens[g] = q[0]
+			queues[name] = q[1:]
+			continue
+		}
+		if base := trimNumSuffix(name); base != name {
+			if q := queues[base]; len(q) > 0 {
+				tokens[g] = q[0]
+				queues[base] = q[1:]
+			}
+		}
+	}
+	return tokens
+}
+
+// segmentsFor walks the match spans and emits a segment per token (outermost
+// capture wins) plus literal segments for the text between them.
+func segmentsFor(line string, idx []int, names, tokens []string) []segment {
+	type span struct {
+		start, end int
+		token      string
+		field      string
+	}
+	spans := make([]span, 0, len(names))
+	for g := 1; g < len(names); g++ {
+		start, end := idx[2*g], idx[2*g+1]
+		if start < 0 || end <= start {
+			continue
+		}
+		spans = append(spans, span{start: start, end: end, token: tokens[g], field: names[g]})
+	}
+	sort.SliceStable(spans, func(i, j int) bool {
+		if spans[i].start != spans[j].start {
+			return spans[i].start < spans[j].start
+		}
+		return spans[i].end > spans[j].end // longer (outer) first
+	})
+
+	var segs []segment
+	pos := 0
+	for _, s := range spans {
+		if s.start < pos {
+			continue // overlaps an already-emitted (outer) span
+		}
+		if s.start > pos {
+			segs = append(segs, segment{Text: line[pos:s.start]})
+		}
+		segs = append(segs, segment{Text: line[s.start:s.end], Token: s.token, Field: s.field})
+		pos = s.end
+	}
+	if pos < len(line) {
+		segs = append(segs, segment{Text: line[pos:]})
+	}
+	if len(segs) == 0 {
+		segs = append(segs, segment{Text: line})
+	}
+	return segs
+}
+
+// trimNumSuffix removes the compiler's duplicate-field suffix (`_2`).
+func trimNumSuffix(s string) string {
+	i := strings.LastIndexByte(s, '_')
+	if i <= 0 || i == len(s)-1 {
+		return s
+	}
+	for _, c := range s[i+1:] {
+		if c < '0' || c > '9' {
+			return s
+		}
+	}
+	return s[:i]
+}
+
+// sanitizeField mirrors the library's field-name sanitization so parsed refs
+// match the compiled subexpression names.
+func sanitizeField(s string) string {
+	out := make([]byte, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '_':
+			out = append(out, c)
+		default:
+			out = append(out, '_')
+		}
+	}
+	if len(out) == 0 {
+		return ""
+	}
+	if out[0] >= '0' && out[0] <= '9' {
+		out = append([]byte{'_'}, out...)
+	}
+	return string(out)
+}
+
 // --- handler ---
 
 func handleDiscover(w http.ResponseWriter, r *http.Request, maxBody int64) {
@@ -195,17 +363,12 @@ func handleDiscover(w http.ResponseWriter, r *http.Request, maxBody int64) {
 		return
 	}
 
-	// Per-line match bitmap for the UI, aligned 1:1 with the split input so
-	// the client can highlight matched lines. The pattern is the same one
-	// coverage was measured with, so the true count equals pattern.matched.
-	matches := make([]bool, len(lines))
-	if re, cerr := l2g.CompileGrok(dp.Grok, dp.CustomPatterns); cerr == nil {
-		for i, line := range lines {
-			if line == "" {
-				continue // the library excludes empty lines from its counts
-			}
-			matches[i] = re.MatchString(line)
-		}
+	// Per-line token segments for the UI, aligned 1:1 with the split input so
+	// the client can tint each token by the Grok primitive it matched. Bounded
+	// so a huge paste does not produce a huge JSON payload or DOM.
+	var lineTokens []linePayload
+	if len(lines) <= maxTokenLines && len(req.Logs) <= maxTokenBytes {
+		lineTokens = buildLineTokens(dp.Grok, dp.CustomPatterns, lines)
 	}
 
 	writeJSON(w, http.StatusOK, discoverResponse{
@@ -220,7 +383,7 @@ func handleDiscover(w http.ResponseWriter, r *http.Request, maxBody int64) {
 			Truncated:    dp.Truncated,
 			Estimated:    dp.Estimated,
 		},
-		Matches: matches,
+		Lines: lineTokens,
 		Meta: metaPayload{
 			Lines:     nonEmptyCount(lines),
 			ElapsedMs: time.Since(started).Milliseconds(),

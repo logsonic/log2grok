@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -298,49 +299,84 @@ func TestAppServed(t *testing.T) {
 	}
 }
 
-// The response must carry a per-line match bitmap aligned 1:1 with the lines
-// the client renders (same split as splitLines), so the UI can highlight
-// matched lines. The count of true entries must agree with pattern.matched.
-func TestDiscoverReportsPerLineMatches(t *testing.T) {
-	cases := []struct {
-		name string
-		logs string
-	}{
-		{"nginx", nginxSample},
-		{"mixed", nginxSample + "\n" + `{"a":1}` + "\n" + `{"a":2}`},
-		{"interior blank", "10.0.0.1 - a [15/Jan/2025:1:2:3 +0000] \"GET / HTTP/1.1\" 200 1\n\n" +
-			"10.0.0.2 - b [15/Jan/2025:1:2:4 +0000] \"GET / HTTP/1.1\" 200 2"},
-	}
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			rec := postJSON(t, testMux(), `{"logs":`+jsonString(tc.logs)+`}`)
-			if rec.Code != http.StatusOK {
-				t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+// The response must carry per-line token segments so the UI can tint each
+// token by the Grok primitive it matched. Segments cover the whole line (their
+// concatenated text reproduces it exactly), and `matched` agrees with the
+// reported coverage.
+func TestDiscoverReportsTokens(t *testing.T) {
+	t.Run("nginx tokens", func(t *testing.T) {
+		rec := postJSON(t, testMux(), `{"logs":`+jsonString(nginxSample)+`}`)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			Pattern struct {
+				Matched int `json:"matched"`
+			} `json:"pattern"`
+			Lines []struct {
+				Matched  bool `json:"matched"`
+				Segments []struct {
+					Text  string `json:"text"`
+					Token string `json:"token"`
+					Field string `json:"field"`
+				} `json:"segments"`
+			} `json:"lines"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("invalid JSON: %v", err)
+		}
+		want := splitLines(nginxSample)
+		if len(resp.Lines) != len(want) {
+			t.Fatalf("len(lines) = %d, want %d", len(resp.Lines), len(want))
+		}
+		matched := 0
+		sawClientIP := false
+		for i, ln := range resp.Lines {
+			if ln.Matched {
+				matched++
 			}
-			var resp struct {
-				Pattern struct {
-					Matched int `json:"matched"`
-					Total   int `json:"total"`
-				} `json:"pattern"`
-				Matches []bool `json:"matches"`
-			}
-			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-				t.Fatalf("invalid JSON: %v", err)
-			}
-			wantLen := len(splitLines(tc.logs))
-			if len(resp.Matches) != wantLen {
-				t.Fatalf("len(matches) = %d, want %d", len(resp.Matches), wantLen)
-			}
-			got := 0
-			for _, m := range resp.Matches {
-				if m {
-					got++
+			var joined strings.Builder
+			for _, s := range ln.Segments {
+				joined.WriteString(s.Text)
+				if s.Field == "client_ip" && s.Token == "IPORHOST" {
+					sawClientIP = true
 				}
 			}
-			if got != resp.Pattern.Matched {
-				t.Fatalf("true entries = %d, want pattern.matched = %d", got, resp.Pattern.Matched)
+			if joined.String() != want[i] {
+				t.Fatalf("line %d segments = %q, want %q", i, joined.String(), want[i])
 			}
-		})
-	}
+		}
+		if matched != resp.Pattern.Matched {
+			t.Fatalf("matched lines = %d, want pattern.matched = %d", matched, resp.Pattern.Matched)
+		}
+		if !sawClientIP {
+			t.Fatal("no client_ip/IPORHOST token segment found")
+		}
+	})
+
+	t.Run("unmatched line", func(t *testing.T) {
+		var b strings.Builder
+		for i := 1; i <= 9; i++ {
+			fmt.Fprintf(&b, "10.0.0.%d - u%d [15/Jan/2025:10:23:45 +0000] \"GET /x HTTP/1.1\" 200 %d\n", i, i, i)
+		}
+		b.WriteString("Jan 15 10:23:45 host sshd[1234]: Accepted publickey for root from 10.0.0.1")
+		rec := postJSON(t, testMux(), `{"logs":`+jsonString(b.String())+`}`)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			Lines []struct {
+				Matched bool `json:"matched"`
+			} `json:"lines"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("invalid JSON: %v", err)
+		}
+		if len(resp.Lines) != 10 {
+			t.Fatalf("len(lines) = %d, want 10", len(resp.Lines))
+		}
+		if resp.Lines[9].Matched {
+			t.Fatal("last line (sshd) should be unmatched")
+		}
+	})
 }

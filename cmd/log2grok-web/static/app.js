@@ -36,80 +36,18 @@ const el = {
   copy: document.getElementById("copy"),
 };
 
-function countLines(text) {
-  return text.split("\n").filter((line) => line.trim() !== "").length;
-}
-
-// Per-line highlighting is done with a transparent backdrop layer aligned
-// under the textarea. Bounded so a huge paste cannot create a huge DOM.
+// Token highlighting uses a transparent backdrop layer aligned under the
+// textarea; each token span gets a background tint. Bounded so a huge paste
+// cannot produce a huge DOM.
 const MAX_HIGHLIGHT_LINES = 2000;
 const MAX_HIGHLIGHT_CHARS = 500000;
 const EDITOR_MAX_PX = 420;
 
 let currentLines = [];
-let lastMatches = null;
+let serverLines = null; // per-line {matched, segments} from the last discovery
 
-// splitLogLines mirrors the server's splitLines: split on \n, drop one
-// trailing \r per line, drop trailing empty lines. Its length must equal the
-// server's matches array so line i maps to matches[i].
-function splitLogLines(text) {
-  if (text === "") return [];
-  const lines = text.split("\n").map((line) => line.replace(/\r$/, ""));
-  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  return lines;
-}
-
-function renderLogLines(text) {
-  el.legend.hidden = true;
-  if (text.length > MAX_HIGHLIGHT_CHARS) {
-    currentLines = [];
-    el.logLines.replaceChildren();
-    return;
-  }
-  const lines = splitLogLines(text);
-  if (lines.length > MAX_HIGHLIGHT_LINES) {
-    currentLines = [];
-    el.logLines.replaceChildren();
-    return;
-  }
-  currentLines = lines;
-  const frag = document.createDocumentFragment();
-  for (const line of lines) {
-    const div = document.createElement("div");
-    div.className = "logline";
-    div.textContent = line === "" ? "\u200b" : line;
-    frag.appendChild(div);
-  }
-  el.logLines.replaceChildren(frag);
-  el.logLines.scrollTop = el.logs.scrollTop;
-}
-
-function clearHighlights() {
-  lastMatches = null;
-  for (const line of el.logLines.children) line.classList.remove("is-match", "is-miss");
-  el.legend.hidden = true;
-}
-
-function applyMatches(matches) {
-  const lines = el.logLines.children;
-  if (!matches || matches.length !== lines.length) {
-    clearHighlights();
-    return;
-  }
-  for (let i = 0; i < lines.length; i++) {
-    const blank = currentLines[i] === "";
-    lines[i].classList.toggle("is-match", !blank && matches[i]);
-    lines[i].classList.toggle("is-miss", !blank && !matches[i]);
-  }
-  el.legend.hidden = lines.length === 0;
-}
-
-function autosize() {
-  el.logs.style.height = "auto";
-  const full = el.logs.scrollHeight;
-  el.logs.style.height = Math.min(full, EDITOR_MAX_PX) + "px";
-  el.logs.style.overflowY = full > EDITOR_MAX_PX ? "auto" : "hidden";
-  el.logLines.scrollTop = el.logs.scrollTop;
+function countLines(text) {
+  return text.split("\n").filter((line) => line.trim() !== "").length;
 }
 
 function updateCount() {
@@ -134,6 +72,136 @@ function showError(message) {
 function clearFeedback() {
   el.feedback.hidden = true;
   el.feedback.textContent = "";
+}
+
+// splitLogLines mirrors the server's splitLines: split on \n, drop one
+// trailing \r per line, drop trailing empty lines. Its length must equal the
+// server's per-line array so line i maps to serverLines[i].
+function splitLogLines(text) {
+  if (text === "") return [];
+  const lines = text.split("\n").map((line) => line.replace(/\r$/, ""));
+  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  return lines;
+}
+
+// tokenFamily maps a Grok primitive name to a semantic color family.
+function tokenFamily(token) {
+  const t = String(token || "").toUpperCase();
+  if (!t) return "other";
+  if (/TIME|DATE|MONTH|YEAR|DAY|HOUR|MINUTE|SECOND|TZ$/.test(t)) return "time";
+  if (/LEVEL|SEVERITY/.test(t)) return "level";
+  if (/IP$|^IP|HOST|PORT/.test(t)) return "ip";
+  if (/INT|NUM|FLOAT|DURATION|DECIMAL/.test(t)) return "number";
+  if (/URI|URL|PATH|URN/.test(t)) return "uri";
+  if (/QUOTED|QS$/.test(t)) return "quoted";
+  if (/UUID|MAC$|EMAIL/.test(t)) return "id";
+  if (/WORD|NOTSPACE|DATA|SPACE|USER|GREEDY|PROG/.test(t)) return "word";
+  return "other";
+}
+
+// renderLines paints the backdrop: token segments when a discovery result is
+// available and aligned, otherwise plain text. Token text is transparent (the
+// textarea shows the real text); only the backgrounds are visible.
+function renderLines() {
+  el.legend.hidden = true;
+  const text = el.logs.value;
+  if (text.length > MAX_HIGHLIGHT_CHARS) {
+    currentLines = [];
+    el.logLines.replaceChildren();
+    return;
+  }
+  const raw = splitLogLines(text);
+  if (raw.length > MAX_HIGHLIGHT_LINES) {
+    currentLines = [];
+    el.logLines.replaceChildren();
+    return;
+  }
+  currentLines = raw;
+
+  const useTokens =
+    Array.isArray(serverLines) &&
+    serverLines.length === raw.length &&
+    serverLines.some((l) => l && Array.isArray(l.segments) && l.segments.some((s) => s.token));
+
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < raw.length; i++) {
+    const div = document.createElement("div");
+    div.className = "logline";
+    if (useTokens) {
+      const line = serverLines[i];
+      const blank = raw[i] === "";
+      div.classList.toggle("is-miss", !blank && line.matched === false);
+      let content = false;
+      for (const s of line.segments || []) {
+        if (s.token) {
+          const span = document.createElement("span");
+          span.className = "tok";
+          span.dataset.k = tokenFamily(s.token);
+          span.title = (s.field ? s.field + ": " : "") + "%{" + s.token + "}";
+          span.textContent = s.text;
+          div.appendChild(span);
+          content = true;
+        } else if (s.text !== "") {
+          div.appendChild(document.createTextNode(s.text));
+          content = true;
+        }
+      }
+      if (!content) div.textContent = "\u200b";
+    } else {
+      div.textContent = raw[i] === "" ? "\u200b" : raw[i];
+    }
+    frag.appendChild(div);
+  }
+  el.logLines.replaceChildren(frag);
+  el.logLines.scrollTop = el.logs.scrollTop;
+  if (useTokens) buildLegend();
+}
+
+// buildLegend lists the distinct tokens in the current pattern (each with its
+// color swatch) plus an "unmatched line" chip when any line failed to match.
+function buildLegend() {
+  const seen = new Map();
+  let hasMiss = false;
+  for (let i = 0; i < currentLines.length; i++) {
+    const line = serverLines[i];
+    if (!line) continue;
+    if (currentLines[i] !== "" && line.matched === false) hasMiss = true;
+    for (const s of line.segments || []) {
+      if (s.token && !seen.has(s.token)) seen.set(s.token, tokenFamily(s.token));
+    }
+  }
+  if (seen.size === 0 && !hasMiss) {
+    el.legend.hidden = true;
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  const label = document.createElement("span");
+  label.className = "legend__label";
+  label.textContent = "tokens:";
+  frag.appendChild(label);
+  const chip = (family, text, miss) => {
+    const item = document.createElement("span");
+    item.className = "legend__item";
+    const sw = document.createElement("span");
+    sw.className = miss ? "swatch swatch--miss" : "swatch";
+    if (!miss) sw.dataset.k = family;
+    const name = document.createElement("span");
+    name.textContent = text;
+    item.append(sw, name);
+    frag.appendChild(item);
+  };
+  for (const [tok, family] of seen) chip(family, tok, false);
+  if (hasMiss) chip(null, "unmatched line", true);
+  el.legend.replaceChildren(frag);
+  el.legend.hidden = false;
+}
+
+function autosize() {
+  el.logs.style.height = "auto";
+  const full = el.logs.scrollHeight;
+  el.logs.style.height = Math.min(full, EDITOR_MAX_PX) + "px";
+  el.logs.style.overflowY = full > EDITOR_MAX_PX ? "auto" : "hidden";
+  el.logLines.scrollTop = el.logs.scrollTop;
 }
 
 function render(data) {
@@ -171,8 +239,8 @@ function render(data) {
     el.notes.appendChild(li);
   }
 
-  lastMatches = data.matches || null;
-  applyMatches(lastMatches);
+  serverLines = Array.isArray(data.lines) ? data.lines : null;
+  renderLines();
 }
 
 async function discover() {
@@ -205,16 +273,17 @@ async function discover() {
 el.discover.addEventListener("click", discover);
 el.clear.addEventListener("click", () => {
   el.logs.value = "";
+  serverLines = null;
   clearFeedback();
   el.result.hidden = true;
-  renderLogLines("");
+  renderLines();
   autosize();
   updateCount();
   el.logs.focus();
 });
 el.logs.addEventListener("input", () => {
-  clearHighlights();
-  renderLogLines(el.logs.value);
+  serverLines = null; // highlights are stale as soon as the text changes
+  renderLines();
   autosize();
   updateCount();
 });
@@ -231,8 +300,8 @@ el.examples.addEventListener("click", (event) => {
   const chip = event.target.closest("[data-example]");
   if (!chip) return;
   el.logs.value = EXAMPLES[chip.dataset.example] || "";
-  clearHighlights();
-  renderLogLines(el.logs.value);
+  serverLines = null;
+  renderLines();
   autosize();
   updateCount();
   discover();
@@ -251,12 +320,11 @@ let resizeTimer = null;
 window.addEventListener("resize", () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
-    renderLogLines(el.logs.value);
-    if (lastMatches) applyMatches(lastMatches);
+    renderLines();
     autosize();
   }, 150);
 });
 
-renderLogLines("");
+renderLines();
 autosize();
 updateCount();

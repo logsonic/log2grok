@@ -91,16 +91,24 @@ library defaults (`LibraryThreshold: 0.85`).
     "truncated": false,
     "estimated": false
   },
-  "matches": [true, true, false],
+  "lines": [
+    { "matched": true, "segments": [
+        { "text": "10.0.0.1", "token": "IPORHOST", "field": "client_ip" },
+        { "text": " - alice " }
+    ]}
+  ],
   "meta": { "lines": 4900, "elapsedMs": 12 }
 }
 ```
 
 `lines` is the count of non-empty input lines; `grok` is always a non-empty
-string on success. `matches` is a per-line boolean aligned 1:1 with the input
-split on `\n` (one entry per rendered line, in the same order; empty lines are
-`false`), so the UI can highlight which lines the pattern matched. The number of
-`true` entries equals `pattern.matched`.
+string on success. `lines[]` is aligned 1:1 with the input split on `\n` (one
+entry per rendered line, same order). Each entry reports whether the line
+matched and carries `segments` that cover the whole line: a token segment names
+the Grok primitive it matched (`token`) and the capture field (`field`), and a
+literal segment has neither. Concatenating a line's segment texts reproduces the
+line exactly. When the pattern names no fields (e.g. a bare CSV/TSV split), a
+line is a single literal segment.
 
 ### Error response (`4xx`/`5xx`)
 
@@ -144,11 +152,13 @@ All responses set `Content-Type: application/json; charset=utf-8`.
 - **Result card:** the Grok pattern in monospace, prominent, with a **Copy**
   button and copy feedback; a meta row with source/family badges and a coverage
   bar (`matched` / `total`); notes/warning per §5.
-- **Per-line highlighting:** after discovery, the input lines are highlighted in
-  place — matched lines get one distinct background, unmatched lines another —
-  with a legend. Highlighting uses an aligned, `aria-hidden` backdrop layer
-  under the textarea (a `<textarea>` cannot style individual lines), is cleared
-  while editing, and is bounded to a few thousand lines.
+- **Token highlighting:** after discovery, each captured token in the input is
+  tinted by the Grok primitive it matched (`IPORHOST`, `HTTPDATE`, `INT`, …),
+  grouped into semantic families; a legend maps each token to its color.
+  Unmatched lines get a subtle red tint. Rendering uses an aligned, `aria-hidden`
+  backdrop layer of token spans under the textarea (a `<textarea>` cannot style
+  individual tokens); it is cleared while editing and bounded to a few thousand
+  lines.
 - **Visual direction (frontend-design):** restrained single-accent palette,
   subtle borders and shadows, refined type scale, system UI font stack for
   chrome and a monospace stack for patterns, dark mode via
