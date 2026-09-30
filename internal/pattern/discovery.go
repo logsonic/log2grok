@@ -145,7 +145,7 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 	go func() {
 		var buf bytes.Buffer
 		dp := tryLibrary(sample, evalSet, threshold, &buf, ctlLibrary)
-		accept := dp != nil && dp.Coverage >= threshold
+		accept := dp != nil && dp.Coverage >= threshold && librarySpecific(dp)
 		if accept {
 			fmt.Fprintf(&buf, "stage2 library auto-accept: %s coverage=%.3f\n", dp.Source, dp.Coverage)
 		}
@@ -184,6 +184,25 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 
 	library := <-libraryCh
 	if library.autoAccept {
+		abortStage(ctlInferred, "inferred")
+		flushDiag(diag, structured.diag, library.diag)
+		return finalize(library.candidate, total, len(evalSet), estimated, truncated), nil
+	}
+
+	// A contentless structured candidate (logfmt blob, keyless JSON skeleton,
+	// or a CSV/TSV column split) that covers the input is a better single-shot
+	// answer than an inferred shape that overfits the sample's literals — and
+	// than a generic library fallback — but only when no *specific* library
+	// pattern matched (the auto-accept check above has ruled that out).
+	if structured.candidate != nil && structured.candidate.Coverage >= threshold {
+		abortStage(ctlInferred, "inferred")
+		flushDiag(diag, structured.diag, library.diag)
+		return finalize(structured.candidate, total, len(evalSet), estimated, truncated), nil
+	}
+
+	// Generic library fallbacks (e.g. "Generic Bracketed Timestamp") still beat
+	// inferred shapes; they just cannot pre-empt a concrete structural parse.
+	if library.candidate != nil && library.candidate.Coverage >= threshold {
 		abortStage(ctlInferred, "inferred")
 		flushDiag(diag, structured.diag, library.diag)
 		return finalize(library.candidate, total, len(evalSet), estimated, truncated), nil
@@ -304,23 +323,31 @@ func familyRank(family string) int {
 	}
 }
 
-// structuredHasTypedCapture decides whether the structured-stage
-// candidate is informative enough to auto-accept. CSV/TSV/W3C and other
-// schema-driven literal patterns intentionally have zero named captures
-// (column semantics are not recoverable from a delimiter); they remain
-// eligible. The single case we want to block is the keyless JSON
-// skeleton — `\{%{GREEDYDATA:json}\}` — which is emitted when no JSON
-// key crosses the common-frequency bar. That candidate matches every
-// JSON line at 100% coverage and would otherwise short-circuit the
-// later (more informative) stages.
+// structuredHasTypedCapture decides whether the structured-stage candidate is
+// specific enough to short-circuit the library stage: it must name at least
+// one field. Contentless parsers — logfmt's %{GREEDYDATA:kvpairs}, the keyless
+// JSON skeleton `\{%{GREEDYDATA:json}\}`, and pure CSV/TSV column splits —
+// yield to a specific curated library pattern (a comma-containing nginx error
+// line is not really CSV), then win via the contentless fallback in Discover.
 func structuredHasTypedCapture(dp *DiscoveredPattern) bool {
 	if dp == nil {
 		return false
 	}
-	if dp.Grok == `\{%{GREEDYDATA:json}\}` {
+	return typedCaptureCount(dp.Grok) > 0
+}
+
+// librarySpecific reports whether a curated library candidate is concrete
+// enough to auto-accept. Generic* fallbacks and patterns that name fewer than
+// two fields only compete with (rather than pre-empt) a contentless structural
+// parse such as CSV/TSV or a logfmt blob.
+func librarySpecific(dp *DiscoveredPattern) bool {
+	if dp == nil {
 		return false
 	}
-	return true
+	if strings.HasPrefix(dp.Source, "library:Generic ") {
+		return false
+	}
+	return typedCaptureCount(dp.Grok) >= 2
 }
 
 func typedCaptureCount(grok string) int {
