@@ -30,14 +30,36 @@ func EvaluateCoverage(re *regexp.Regexp, lines []string) int {
 // final count could exceed floor, no prefix satisfies the prune condition),
 // so an exact count never flips a strict-`>` decision.
 func evaluateCoverageWithFloor(re *regexp.Regexp, lines []string, floor int) int {
+	return evaluateCoverageWithFloorCtl(re, lines, floor, nil)
+}
+
+// evaluateCoverageCtl is EvaluateCoverage with a cancellation token. A
+// cancelled scan returns a partial count that the caller must discard —
+// used by the discovery stages so a losing stage stops scanning once a
+// higher-priority stage auto-accepts.
+func evaluateCoverageCtl(re *regexp.Regexp, lines []string, ctl *scanCtl) int {
+	return scanMatches(re, lines, ctl)
+}
+
+// evaluateCoverageWithFloorCtl is evaluateCoverageWithFloor with a
+// cancellation token. On the parallel path cancellation returns a partial
+// count that the caller must discard (the discovery coordinator only reads
+// a stage's result when that stage was NOT aborted).
+func evaluateCoverageWithFloorCtl(re *regexp.Regexp, lines []string, floor int, ctl *scanCtl) int {
 	if re == nil {
 		return 0
 	}
 	if runtime.GOMAXPROCS(0) >= 2 && len(lines) >= parallelScanMinLines {
-		return scanMatches(re, lines, nil) // exact count
+		return scanMatches(re, lines, ctl)
 	}
 	n := 0
 	for i, line := range lines {
+		if ctl.isAborted() {
+			if scanAbortHook != nil {
+				scanAbortHook()
+			}
+			return n
+		}
 		if re.MatchString(line) {
 			n++
 		}

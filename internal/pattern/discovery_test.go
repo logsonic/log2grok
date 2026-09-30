@@ -189,3 +189,79 @@ func TestDiscoverPrefersLibraryOverInferredTextEnvelope(t *testing.T) {
 		t.Fatalf("grok = %q, want Consul library pattern", dp.Grok)
 	}
 }
+
+// When stage 1 (structured) auto-accepts, the library and inferred stages
+// must be aborted. The result must still be the stage-1 candidate,
+// byte-identical to the pre-cancellation behavior. We assert on the
+// coordinator's abort decision (stageAbortHook), which is synchronous and
+// therefore deterministic — a scan-level observation would only fire if a
+// lower stage happened to still be mid-scan.
+func TestDiscoverAbortsLowerStagesOnStructuredAutoAccept(t *testing.T) {
+	oldCap := coverageEvalCap
+	coverageEvalCap = 100000 // keep the exact-coverage path
+	defer func() { coverageEvalCap = oldCap }()
+
+	lines := []string{
+		`{"ts":"2025-01-15T10:23:45Z","level":"info","msg":"job 1"}`,
+		`{"ts":"2025-01-15T10:23:46Z","level":"info","msg":"job 2"}`,
+		`{"ts":"2025-01-15T10:23:47Z","level":"info","msg":"job 3"}`,
+	}
+	opts := Options{LibraryThreshold: 0.85}
+
+	aborted := make(chan string, 8)
+	oldHook := stageAbortHook
+	stageAbortHook = func(stage string) { aborted <- stage }
+	defer func() { stageAbortHook = oldHook }()
+
+	dp, err := Discover(lines, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dp.SourceFamily != "structured" {
+		t.Fatalf("expected structured auto-accept, got %s (%s)", dp.SourceFamily, dp.Source)
+	}
+	got := map[string]bool{}
+	for {
+		select {
+		case stage := <-aborted:
+			got[stage] = true
+			continue
+		default:
+		}
+		break
+	}
+	if !got["library"] || !got["inferred"] {
+		t.Fatalf("expected library and inferred to be aborted, got %v", got)
+	}
+}
+
+// And the inverse: with NO auto-accept, no stage may be aborted (aborted
+// partial counts would poison pickBetter).
+func TestDiscoverNoAbortWithoutAutoAccept(t *testing.T) {
+	oldCap := coverageEvalCap
+	coverageEvalCap = 100000
+	defer func() { coverageEvalCap = oldCap }()
+
+	// Heterogeneous lines: no stage reaches the 0.85 threshold.
+	lines := []string{
+		"user alice logged in from 10.0.0.1",
+		"backup finished with status 0",
+		"cache: 512 entries evicted",
+		"temperature reading 21.5 celsius",
+	}
+	opts := Options{LibraryThreshold: 0.999}
+
+	aborted := make(chan string, 8)
+	oldHook := stageAbortHook
+	stageAbortHook = func(stage string) { aborted <- stage }
+	defer func() { stageAbortHook = oldHook }()
+
+	if _, err := Discover(lines, opts); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case stage := <-aborted:
+		t.Fatalf("stage %q was aborted although no stage auto-accepted", stage)
+	default:
+	}
+}
