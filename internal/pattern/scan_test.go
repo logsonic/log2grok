@@ -186,3 +186,50 @@ func TestScanMatchesConcurrentSafe(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// The parallel floor scan must yield the same accept/reject decision as the
+// sequential prune for a candidate that exactly TIES the floor. betterCandidate
+// compares Matched first and then tie-breaks on it, so returning the exact
+// count in that one case would flip which library pattern wins.
+func TestEvaluateCoverageWithFloorTieMatchesSequentialDecision(t *testing.T) {
+	old := parallelScanMinLines
+	defer func() { parallelScanMinLines = old }()
+	if runtime.GOMAXPROCS(0) < 2 {
+		t.Skip("single-core machine; parallel path unreachable")
+	}
+
+	// 8192 lines; the 100 matching lines sit at the END, so the sequential
+	// prune fires early and returns 0 (< floor) while the exact count ties floor.
+	lines := make([]string, 8192)
+	for i := range lines {
+		lines[i] = "no"
+	}
+	for i := 8092; i < len(lines); i++ {
+		lines[i] = "42"
+	}
+	re := regexp.MustCompile(`\d+`)
+	const floor = 100 // == exact count
+
+	best := &candidateResult{Matched: floor, Pattern: KnownPattern{Pattern: `%{WORD:a}`}}
+	next := &candidateResult{Pattern: KnownPattern{Pattern: `%{WORD:a} %{WORD:b}`}}
+
+	decide := func(parallel bool) (matched int, decision bool) {
+		if parallel {
+			parallelScanMinLines = 0
+		} else {
+			parallelScanMinLines = 1 << 30
+		}
+		next.Matched = evaluateCoverageWithFloorCtl(re, lines, floor, nil)
+		return next.Matched, betterCandidate(next, best)
+	}
+
+	seqMatched, seqDecision := decide(false)
+	parMatched, parDecision := decide(true)
+	if seqDecision != parDecision {
+		t.Fatalf("decision diverges: sequential=%v (matched=%d) parallel=%v (matched=%d), floor=%d",
+			seqDecision, seqMatched, parDecision, parMatched, floor)
+	}
+	if parMatched != seqMatched {
+		t.Fatalf("tie value diverges: sequential=%d parallel=%d, floor=%d", seqMatched, parMatched, floor)
+	}
+}
