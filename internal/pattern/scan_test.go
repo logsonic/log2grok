@@ -114,6 +114,34 @@ func TestScanAbortHook(t *testing.T) {
 	}
 }
 
+// The floor variant's callers only make strict-> decisions
+// (betterCandidate, relaxTail). Property: the returned value either equals
+// the exact count, or is <= floor; and the decision "count > floor" must
+// match the exact count's decision in both modes.
+func TestEvaluateCoverageWithFloorDecisionEquivalence(t *testing.T) {
+	old := parallelScanMinLines
+	defer func() { parallelScanMinLines = old }()
+
+	re := regexp.MustCompile(`\d+`)
+	lines := deterministicLines(2000)
+	exact := EvaluateCoverage(re, lines)
+
+	for _, mode := range []int{0, 1 << 30} { // 0 forces parallel (when procs>=2), huge forces sequential
+		parallelScanMinLines = mode
+		for floor := -1; floor <= len(lines); floor++ {
+			got := evaluateCoverageWithFloor(re, lines, floor)
+			if got > floor && got != exact {
+				t.Fatalf("mode=%d floor=%d: got %d, exact %d", mode, floor, got, exact)
+			}
+			decision := got > floor
+			wantDecision := exact > floor
+			if decision != wantDecision {
+				t.Fatalf("mode=%d floor=%d: decision %v, exact-decision %v", mode, floor, decision, wantDecision)
+			}
+		}
+	}
+}
+
 func TestScanMatchesConcurrentSafe(t *testing.T) {
 	old := parallelScanMinLines
 	parallelScanMinLines = 0
