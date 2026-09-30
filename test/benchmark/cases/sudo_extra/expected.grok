@@ -1,0 +1,1 @@
+%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} sudo:\s+%{NOTSPACE:user}\s+:.*?USER=root\s*;\s*COMMAND=%{GREEDYDATA:command}

@@ -1,0 +1,1 @@
+%{HDFS_DATE:date} %{HDFS_TIME:time} %{INT:thread} %{LOGLEVEL:level} %{NOTSPACE:component}: %{GREEDYDATA:message}

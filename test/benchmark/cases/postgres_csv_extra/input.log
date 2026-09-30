@@ -1,0 +1,15 @@
+2024-10-10 13:00:00.000 UTC,5000,user@db,LOG,duration: 0.000 ms  statement: SELECT 1
+2024-10-10 13:00:01.001 UTC,5001,user@db,LOG,duration: 1.001 ms  statement: SELECT 1
+2024-10-10 13:00:02.002 UTC,5002,user@db,LOG,duration: 2.002 ms  statement: SELECT 1
+2024-10-10 13:00:03.003 UTC,5003,user@db,LOG,duration: 3.003 ms  statement: SELECT 1
+2024-10-10 13:00:04.004 UTC,5004,user@db,LOG,duration: 4.004 ms  statement: SELECT 1
+2024-10-10 13:00:05.005 UTC,5005,user@db,LOG,duration: 5.005 ms  statement: SELECT 1
+2024-10-10 13:00:06.006 UTC,5006,user@db,LOG,duration: 6.006 ms  statement: SELECT 1
+2024-10-10 13:00:07.007 UTC,5007,user@db,LOG,duration: 7.007 ms  statement: SELECT 1
+2024-10-10 13:00:08.008 UTC,5008,user@db,LOG,duration: 8.008 ms  statement: SELECT 1
+2024-10-10 13:00:09.009 UTC,5009,user@db,LOG,duration: 9.009 ms  statement: SELECT 1
+2024-10-10 13:00:10.010 UTC,5010,user@db,LOG,duration: 10.010 ms  statement: SELECT 1
+2024-10-10 13:00:11.011 UTC,5011,user@db,LOG,duration: 11.011 ms  statement: SELECT 1
+2024-10-10 13:00:12.012 UTC,5012,user@db,LOG,duration: 12.012 ms  statement: SELECT 1
+2024-10-10 13:00:13.013 UTC,5013,user@db,LOG,duration: 13.013 ms  statement: SELECT 1
+2024-10-10 13:00:14.014 UTC,5014,user@db,LOG,duration: 14.014 ms  statement: SELECT 1

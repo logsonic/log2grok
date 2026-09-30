@@ -1,0 +1,1 @@
+\{\s*"output"\s*:\s*%{QUOTEDSTRING:output}\s*,\s*"priority"\s*:\s*%{QUOTEDSTRING:priority}\s*,\s*"rule"\s*:\s*%{QUOTEDSTRING:rule}\s*,\s*"time"\s*:\s*%{QUOTEDSTRING:timestamp}\s*,\s*"output_fields"\s*:\s*%{DATA:output_fields}\s*\}

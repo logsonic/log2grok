@@ -1,0 +1,6 @@
+{
+  "case_name": "fastly_syslog_extra",
+  "expected_grok": "<%{INT:priority}>%{TIMESTAMP_ISO8601:timestamp} %{NOTSPACE:cache} %{NOTSPACE:service} %{IP:client_ip} %{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version} %{INT:status} %{INT:bytes}",
+  "expected_source": "library:Fastly Syslog",
+  "family": "fastly"
+}

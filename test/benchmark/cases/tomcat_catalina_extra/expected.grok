@@ -1,0 +1,1 @@
+%{MONTHDAY2}-%{MONTH}-%{YEAR} %{TIME:time} %{LOGLEVEL:level} \[%{PROCID:thread}\] %{GREEDYDATA:message}

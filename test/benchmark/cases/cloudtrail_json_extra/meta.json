@@ -1,0 +1,6 @@
+{
+  "case_name": "cloudtrail_json_extra",
+  "expected_grok": "\\{\\s*\"eventVersion\"\\s*:\\s*%{QUOTEDSTRING:eventversion}\\s*,\\s*\"userIdentity\"\\s*:\\s*%{DATA:useridentity}\\s*,\\s*\"eventTime\"\\s*:\\s*%{QUOTEDSTRING:timestamp}\\s*,\\s*\"eventSource\"\\s*:\\s*%{QUOTEDSTRING:eventsource}\\s*,\\s*\"eventName\"\\s*:\\s*%{QUOTEDSTRING:eventname}\\s*,\\s*\"awsRegion\"\\s*:\\s*%{QUOTEDSTRING:awsregion}\\s*,\\s*\"sourceIPAddress\"\\s*:\\s*%{QUOTEDSTRING:sourceipaddress}\\s*,\\s*\"requestParameters\"\\s*:\\s*%{DATA:requestparameters}\\s*\\}",
+  "expected_source": "structured:CloudTrail JSON",
+  "family": "cloudtrail_json"
+}

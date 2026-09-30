@@ -1,0 +1,1 @@
+%{YEAR:year}\.%{MONTHNUM2:month}\.%{MONTHDAY2:monthday} %{TIME:time} \[ %{INT:n} \] \{%{NOTSPACE:value}\} <Information> Application: Ready for connections

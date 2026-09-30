@@ -1,0 +1,6 @@
+{
+  "case_name": "klog_extra",
+  "expected_grok": "%{NOTSPACE:level_short}%{MONTHNUM2:month}%{MONTHDAY2:day} %{TIME:time}\\s+%{INT:thread_id} %{NOTSPACE:source_file}:%{INT:source_line}\\] %{GREEDYDATA:message}",
+  "expected_source": "library:Kubernetes Klog",
+  "family": "klog"
+}

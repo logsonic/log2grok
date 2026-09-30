@@ -1,0 +1,6 @@
+{
+  "case_name": "azure_activity_json_extra",
+  "expected_grok": "\\{\\s*\"time\"\\s*:\\s*%{QUOTEDSTRING:timestamp}\\s*,\\s*\"resourceId\"\\s*:\\s*%{QUOTEDSTRING:resourceid}\\s*,\\s*\"operationName\"\\s*:\\s*%{QUOTEDSTRING:operationname}\\s*,\\s*\"category\"\\s*:\\s*%{QUOTEDSTRING:category}\\s*,\\s*\"resultType\"\\s*:\\s*%{QUOTEDSTRING:resulttype}\\s*,\\s*\"caller\"\\s*:\\s*%{QUOTEDSTRING:caller}\\s*\\}",
+  "expected_source": "structured:JSON Object",
+  "family": "azure_activity_json"
+}

@@ -1,0 +1,6 @@
+{
+  "case_name": "lambda_json_extra",
+  "expected_grok": "\\{\\s*\"time\"\\s*:\\s*%{QUOTEDSTRING:timestamp}\\s*,\\s*\"type\"\\s*:\\s*%{QUOTEDSTRING:type}\\s*,\\s*\"record\"\\s*:\\s*%{DATA:record}\\s*\\}",
+  "expected_source": "structured:JSON Object",
+  "family": "lambda_json"
+}

@@ -1,0 +1,6 @@
+{
+  "case_name": "spark_extra",
+  "expected_grok": "%{INT:year}/%{INT:month}/%{INT:day} %{TIME:time} %{LOGLEVEL:level} %{NOTSPACE:logger}: %{GREEDYDATA:message}",
+  "expected_source": "structured:Spark",
+  "family": "spark"
+}

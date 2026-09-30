@@ -1,0 +1,6 @@
+{
+  "case_name": "redis_bracketed_extra",
+  "expected_grok": "\\[%{POSINT:pid}\\] %{MONTHDAY:day} %{MONTH:month} %{TIME:time} \\* %{GREEDYDATA:message}",
+  "expected_source": "library:Redis Log Bracketed",
+  "family": "redis_bracketed"
+}

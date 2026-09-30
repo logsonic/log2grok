@@ -1,0 +1,6 @@
+{
+  "case_name": "zap_console_extra",
+  "expected_grok": "[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*\t[^\\t]*",
+  "expected_source": "structured:TSV",
+  "family": "zap_console"
+}

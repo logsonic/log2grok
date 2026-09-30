@@ -1,0 +1,1 @@
+I241010 %{TIME:time} %{INT:n} server/server\.go:%{INT:n_2} \[%{WORD:word}\] started with engine type pebble

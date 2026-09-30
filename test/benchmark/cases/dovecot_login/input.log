@@ -1,0 +1,15 @@
+Oct 10 13:00:00 mail-0 dovecot: imap-login: Login: user=<alice>, method=PLAIN, rip=10.0.0.0, lip=10.0.0.1
+Oct 11 13:00:01 mail-1 dovecot: imap-login: Login: user=<alice>, method=PLAIN, rip=10.0.0.1, lip=10.0.0.1
+Oct 12 13:00:02 mail-2 dovecot: imap-login: Login: user=<alice>, method=PLAIN, rip=10.0.0.2, lip=10.0.0.1
+Oct 13 13:00:03 mail-3 dovecot: imap-login: Login: user=<alice>, method=PLAIN, rip=10.0.0.3, lip=10.0.0.1
+Oct 14 13:00:04 mail-4 dovecot: imap-login: Login: user=<alice>, method=PLAIN, rip=10.0.0.4, lip=10.0.0.1
+Oct 15 13:00:05 mail-5 dovecot: imap-login: Login: user=<alice>, method=PLAIN, rip=10.0.0.5, lip=10.0.0.1
+Oct 16 13:00:06 mail-6 dovecot: imap-login: Login: user=<alice>, method=PLAIN, rip=10.0.0.6, lip=10.0.0.1
+Oct 17 13:00:07 mail-7 dovecot: imap-login: Login: user=<alice>, method=PLAIN, rip=10.0.0.7, lip=10.0.0.1
+Oct 18 13:00:08 mail-8 dovecot: imap-login: Login: user=<alice>, method=PLAIN, rip=10.0.0.8, lip=10.0.0.1
+Oct 19 13:00:09 mail-9 dovecot: imap-login: Login: user=<alice>, method=PLAIN, rip=10.0.0.9, lip=10.0.0.1
+Oct 20 13:00:10 mail-10 dovecot: imap-login: Login: user=<alice>, method=PLAIN, rip=10.0.0.10, lip=10.0.0.1
+Oct 21 13:00:11 mail-11 dovecot: imap-login: Login: user=<alice>, method=PLAIN, rip=10.0.0.11, lip=10.0.0.1
+Oct 22 13:00:12 mail-12 dovecot: imap-login: Login: user=<alice>, method=PLAIN, rip=10.0.0.12, lip=10.0.0.1
+Oct 23 13:00:13 mail-13 dovecot: imap-login: Login: user=<alice>, method=PLAIN, rip=10.0.0.13, lip=10.0.0.1
+Oct 24 13:00:14 mail-14 dovecot: imap-login: Login: user=<alice>, method=PLAIN, rip=10.0.0.14, lip=10.0.0.1

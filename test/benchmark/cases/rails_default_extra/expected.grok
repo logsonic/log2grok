@@ -1,0 +1,1 @@
+%{WORD:level}, \[%{TIMESTAMP_ISO8601:timestamp} #%{INT:pid}\]\s+%{LOGLEVEL:level2}\s+--\s+: %{GREEDYDATA:message}

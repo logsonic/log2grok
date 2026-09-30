@@ -1,0 +1,6 @@
+{
+  "case_name": "kafka_json_extra",
+  "expected_grok": "\\{\\s*\"timestamp\"\\s*:\\s*%{QUOTEDSTRING:timestamp}\\s*,\\s*\"level\"\\s*:\\s*%{QUOTEDSTRING:level}\\s*,\\s*\"logger\"\\s*:\\s*%{QUOTEDSTRING:logger}\\s*,\\s*\"message\"\\s*:\\s*%{QUOTEDSTRING:message}\\s*\\}",
+  "expected_source": "structured:JSON Object",
+  "family": "kafka_json"
+}
