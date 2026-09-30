@@ -3,9 +3,11 @@ package pattern
 import (
 	"fmt"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 type compiledPattern struct {
@@ -92,19 +94,53 @@ type candidateResult struct {
 	FullTotal      int
 }
 
+// scoreLibraryOnSample scores every compiled library pattern against the
+// sample. The outer loop parallelizes across patterns (bounded by
+// GOMAXPROCS); each per-pattern scan stays sequential so parallelism is
+// not nested 90×GOMAXPROCS deep. Results keep input order (indexed writes),
+// so callers' subsequent stable sorts see exactly the sequential ordering.
 func scoreLibraryOnSample(sample []string) []candidateResult {
 	compiled := compiledKnownPatterns()
-	out := make([]candidateResult, 0, len(compiled))
-	for _, cp := range compiled {
-		matched := EvaluateCoverage(cp.Regex, sample)
-		out = append(out, candidateResult{
-			Pattern:        cp.Pattern,
-			Compiled:       cp.Regex,
-			SampleCoverage: ratio(matched, len(sample)),
-			Matched:        matched,
-		})
+	out := make([]candidateResult, len(compiled))
+	workers := min(runtime.GOMAXPROCS(0), len(compiled))
+	if workers < 2 {
+		for i, cp := range compiled {
+			out[i] = scoreOne(cp, sample)
+		}
+		return out
 	}
+	var next atomic.Int64
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for w := 0; w < workers; w++ {
+		go func() {
+			defer wg.Done()
+			for {
+				i := int(next.Add(1)) - 1
+				if i >= len(compiled) {
+					return
+				}
+				out[i] = scoreOne(compiled[i], sample)
+			}
+		}()
+	}
+	wg.Wait()
 	return out
+}
+
+// scoreOne scores one compiled pattern against the sample. The caller
+// parallelizes across patterns, so this stays sequential (scanMatchesSeq):
+// nesting EvaluateCoverage's own parallel scan inside would oversubscribe
+// (sample is exactly parallelScanMinLines, so EvaluateCoverage would fan out
+// GOMAXPROCS workers per pattern).
+func scoreOne(cp compiledPattern, sample []string) candidateResult {
+	matched := scanMatchesSeq(cp.Regex, sample, nil, nil)
+	return candidateResult{
+		Pattern:        cp.Pattern,
+		Compiled:       cp.Regex,
+		SampleCoverage: ratio(matched, len(sample)),
+		Matched:        matched,
+	}
 }
 
 // betterCandidate compares two library-stage candidates. Order:
