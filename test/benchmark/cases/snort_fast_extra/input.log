@@ -1,0 +1,15 @@
+10/10-13:00:00.000 [**] [1:1000:1] attempted login [**] [Classification: Attempted Administrator Privilege Gain] [Priority: 1] {TCP} 10.0.0.0:50000 -> 10.0.0.1:80
+10/10-13:00:01.001 [**] [1:1001:1] attempted login [**] [Classification: Attempted Administrator Privilege Gain] [Priority: 1] {TCP} 10.0.0.1:50001 -> 10.0.0.1:81
+10/10-13:00:02.002 [**] [1:1002:1] attempted login [**] [Classification: Attempted Administrator Privilege Gain] [Priority: 1] {TCP} 10.0.0.2:50002 -> 10.0.0.1:82
+10/10-13:00:03.003 [**] [1:1003:1] attempted login [**] [Classification: Attempted Administrator Privilege Gain] [Priority: 1] {TCP} 10.0.0.3:50003 -> 10.0.0.1:83
+10/10-13:00:04.004 [**] [1:1004:1] attempted login [**] [Classification: Attempted Administrator Privilege Gain] [Priority: 1] {TCP} 10.0.0.4:50004 -> 10.0.0.1:84
+10/10-13:00:05.005 [**] [1:1005:1] attempted login [**] [Classification: Attempted Administrator Privilege Gain] [Priority: 1] {TCP} 10.0.0.5:50005 -> 10.0.0.1:85
+10/10-13:00:06.006 [**] [1:1006:1] attempted login [**] [Classification: Attempted Administrator Privilege Gain] [Priority: 1] {TCP} 10.0.0.6:50006 -> 10.0.0.1:86
+10/10-13:00:07.007 [**] [1:1007:1] attempted login [**] [Classification: Attempted Administrator Privilege Gain] [Priority: 1] {TCP} 10.0.0.7:50007 -> 10.0.0.1:87
+10/10-13:00:08.008 [**] [1:1008:1] attempted login [**] [Classification: Attempted Administrator Privilege Gain] [Priority: 1] {TCP} 10.0.0.8:50008 -> 10.0.0.1:88
+10/10-13:00:09.009 [**] [1:1009:1] attempted login [**] [Classification: Attempted Administrator Privilege Gain] [Priority: 1] {TCP} 10.0.0.9:50009 -> 10.0.0.1:89
+10/10-13:00:10.010 [**] [1:1010:1] attempted login [**] [Classification: Attempted Administrator Privilege Gain] [Priority: 1] {TCP} 10.0.0.10:500010 -> 10.0.0.1:90
+10/10-13:00:11.011 [**] [1:1011:1] attempted login [**] [Classification: Attempted Administrator Privilege Gain] [Priority: 1] {TCP} 10.0.0.11:500011 -> 10.0.0.1:91
+10/10-13:00:12.012 [**] [1:1012:1] attempted login [**] [Classification: Attempted Administrator Privilege Gain] [Priority: 1] {TCP} 10.0.0.12:500012 -> 10.0.0.1:92
+10/10-13:00:13.013 [**] [1:1013:1] attempted login [**] [Classification: Attempted Administrator Privilege Gain] [Priority: 1] {TCP} 10.0.0.13:500013 -> 10.0.0.1:93
+10/10-13:00:14.014 [**] [1:1014:1] attempted login [**] [Classification: Attempted Administrator Privilege Gain] [Priority: 1] {TCP} 10.0.0.14:500014 -> 10.0.0.1:94

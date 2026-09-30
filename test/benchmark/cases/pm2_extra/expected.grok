@@ -1,0 +1,1 @@
+%{INT:id}\|%{NOTSPACE:app}\s+\|\s+%{TIMESTAMP_ISO8601:timestamp}: %{GREEDYDATA:message}

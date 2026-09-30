@@ -1,0 +1,15 @@
+I1010 13:00:00.000 5000 kubelet.go:210] "SyncLoop" node="worker-0" pods=0
+I1011 13:00:01.001 5001 kubelet.go:210] "SyncLoop" node="worker-1" pods=1
+I1012 13:00:02.002 5002 kubelet.go:210] "SyncLoop" node="worker-2" pods=2
+I1013 13:00:03.003 5003 kubelet.go:210] "SyncLoop" node="worker-3" pods=3
+I1014 13:00:04.004 5004 kubelet.go:210] "SyncLoop" node="worker-4" pods=4
+I1015 13:00:05.005 5005 kubelet.go:210] "SyncLoop" node="worker-5" pods=5
+I1016 13:00:06.006 5006 kubelet.go:210] "SyncLoop" node="worker-6" pods=6
+I1017 13:00:07.007 5007 kubelet.go:210] "SyncLoop" node="worker-7" pods=7
+I1018 13:00:08.008 5008 kubelet.go:210] "SyncLoop" node="worker-8" pods=8
+I1019 13:00:09.009 5009 kubelet.go:210] "SyncLoop" node="worker-9" pods=9
+I1020 13:00:10.010 5010 kubelet.go:210] "SyncLoop" node="worker-10" pods=10
+I1021 13:00:11.011 5011 kubelet.go:210] "SyncLoop" node="worker-11" pods=11
+I1022 13:00:12.012 5012 kubelet.go:210] "SyncLoop" node="worker-12" pods=12
+I1023 13:00:13.013 5013 kubelet.go:210] "SyncLoop" node="worker-13" pods=13
+I1024 13:00:14.014 5014 kubelet.go:210] "SyncLoop" node="worker-14" pods=14

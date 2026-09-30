@@ -1,0 +1,6 @@
+{
+  "case_name": "envoy_error_extra",
+  "expected_grok": "\\[%{TIMESTAMP_ISO8601:timestamp}\\]\\[%{INT:thread}\\]\\[%{LOGLEVEL:level}\\]\\[%{NOTSPACE:component}\\] %{GREEDYDATA:message}",
+  "expected_source": "library:Envoy Text Error",
+  "family": "envoy_error"
+}

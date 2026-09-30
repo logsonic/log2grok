@@ -91,46 +91,72 @@ var tileComposites = []*tileComposite{
 }
 
 var (
-	tileExprMu sync.Mutex
-	tileExprRe = map[string]*regexp.Regexp{}
+	compExprMu     sync.RWMutex
+	compExprVer    uint64
+	compExprRe     []*regexp.Regexp // parallel to tileComposites; nil = compile failed
+	compExprLoaded bool
 )
 
+// ensureCompExprs compiles every composite's Expr once per primitive-table
+// version. Called lazily (primitives may load after tiler var init) and on
+// the hot path of matchComposite — RLock-only after the first build.
+func ensureCompExprs() {
+	version := currentPatternStateVersion()
+	compExprMu.RLock()
+	ok := compExprLoaded && compExprVer == version
+	compExprMu.RUnlock()
+	if ok {
+		return
+	}
+
+	built := make([]*regexp.Regexp, len(tileComposites))
+	for i, c := range tileComposites {
+		re, err := CompileGrok(c.Expr, nil)
+		if err != nil {
+			re = nil // failed composites never match (old exprFullMatch semantics)
+		}
+		built[i] = re
+	}
+
+	compExprMu.Lock()
+	defer compExprMu.Unlock()
+	if compExprLoaded && compExprVer == version {
+		return
+	}
+	compExprRe = built
+	compExprVer = version
+	compExprLoaded = true
+}
+
 func resetTilerCaches() {
-	tileExprMu.Lock()
-	tileExprRe = map[string]*regexp.Regexp{}
-	tileExprMu.Unlock()
+	// Invalidate the caches by version, but do NOT drop the compiled slices:
+	// matchComposite and classifyToken index them under the matching read
+	// lock, and a concurrent reset that nil'd a slice between a reader's
+	// ensure*() call and its read would make that reader index an empty slice
+	// and panic. Keeping the (now stale) slices means a reader in that window
+	// reads a valid-length slice; the bumped version forces the next
+	// ensure*() call to rebuild before anything observes stale regexes.
+	compExprMu.Lock()
+	compExprVer = 0
+	compExprLoaded = false
+	compExprMu.Unlock()
 
 	tileSinglesMu.Lock()
 	tileSinglesVersion = 0
-	tileSingles = nil
 	tileDataPrim = nil
 	tileHostnamePrim = nil
 	tileSinglesMu.Unlock()
 }
 
-// exprFullMatch reports whether the compiled Grok expression fully matches
-// span. Compiled expressions are cached; an expression that fails to compile
-// is treated as non-matching.
-func exprFullMatch(expr, span string) bool {
-	tileExprMu.Lock()
-	re, ok := tileExprRe[expr]
-	if !ok {
-		var err error
-		re, err = CompileGrok(expr, nil)
-		if err != nil {
-			re = nil
-		}
-		tileExprRe[expr] = re
-	}
-	tileExprMu.Unlock()
-	return re != nil && re.MatchString(span)
-}
-
 // matchComposite tries each composite at offset i, returning the first whose
 // prefix match ends on a token boundary AND whose Expr full-matches the span.
 func matchComposite(line string, i int) (*tileComposite, int) {
+	ensureCompExprs()
+	compExprMu.RLock()
+	defer compExprMu.RUnlock()
+
 	rest := line[i:]
-	for _, c := range tileComposites {
+	for ci, c := range tileComposites {
 		loc := c.prefix.FindStringIndex(rest)
 		if loc == nil || loc[1] == 0 {
 			continue
@@ -142,7 +168,7 @@ func matchComposite(line string, i int) (*tileComposite, int) {
 		if end < len(line) && !tileDelims[line[end]] && !tileSubSeps[line[end]] {
 			continue
 		}
-		if !exprFullMatch(c.Expr, rest[:loc[1]]) {
+		if compExprRe[ci] == nil || !compExprRe[ci].MatchString(rest[:loc[1]]) {
 			continue
 		}
 		return c, loc[1]
@@ -940,7 +966,7 @@ type tileCandidate struct {
 
 // buildTiling tiles one template line against the sample population and
 // scores the result against eval. Returns nil if it produces no usable grok.
-func buildTiling(template string, sample, eval []string) *tileCandidate {
+func buildTiling(template string, sample, eval []string, ctl *scanCtl) *tileCandidate {
 	pieces, ok := tileInferPieces(template, sample, 0)
 	if !ok {
 		return nil
@@ -953,7 +979,7 @@ func buildTiling(template string, sample, eval []string) *tileCandidate {
 	if !re.MatchString(template) {
 		return nil
 	}
-	matched := EvaluateCoverage(re, eval)
+	matched := evaluateCoverageCtl(re, eval, ctl)
 	if matched == 0 {
 		return nil
 	}
@@ -977,11 +1003,11 @@ const tileShapeTemplates = 16
 // cost. This is the tiler's clustering: each shape's relaxed probe only
 // matches the lines that share its literal skeleton, so each candidate is
 // typed by exactly its own population.
-func tileShapes(sample, eval []string, maxTemplates int) []*tileCandidate {
+func tileShapes(sample, eval []string, maxTemplates int, ctl *scanCtl) []*tileCandidate {
 	templates := pickTemplateLines(sample, maxTemplates)
 	var out []*tileCandidate
 	for _, t := range templates {
-		if c := buildTiling(t, sample, eval); c != nil {
+		if c := buildTiling(t, sample, eval, ctl); c != nil {
 			out = append(out, c)
 		}
 	}
@@ -990,7 +1016,7 @@ func tileShapes(sample, eval []string, maxTemplates int) []*tileCandidate {
 
 // bestTiling picks the strongest shape, relaxing its tail when that buys
 // real coverage.
-func bestTiling(shapes []*tileCandidate, eval []string) *tileCandidate {
+func bestTiling(shapes []*tileCandidate, eval []string, ctl *scanCtl) *tileCandidate {
 	var best *tileCandidate
 	for _, c := range shapes {
 		if betterTiling(c, best) {
@@ -1001,7 +1027,7 @@ func bestTiling(shapes []*tileCandidate, eval []string) *tileCandidate {
 		return nil
 	}
 	if best.Matched < len(eval) {
-		if relaxed := relaxTail(best, eval); relaxed != nil {
+		if relaxed := relaxTail(best, eval, ctl); relaxed != nil {
 			best = relaxed
 		}
 	}
@@ -1021,7 +1047,7 @@ const relaxTailMaxCuts = 24
 // with " | "); on equal coverage the longest prefix wins. The relaxation
 // must buy a real coverage gain (≥2% of eval, min 1 line) so a uniform
 // input keeps its fully-typed pattern.
-func relaxTail(best *tileCandidate, eval []string) *tileCandidate {
+func relaxTail(best *tileCandidate, eval []string, ctl *scanCtl) *tileCandidate {
 	margin := max(len(eval)/50, 1)
 	var bestVar *tileCandidate
 	promoted := 0
@@ -1046,7 +1072,11 @@ func relaxTail(best *tileCandidate, eval []string) *tileCandidate {
 		if err != nil {
 			continue
 		}
-		matched := EvaluateCoverage(re, eval)
+		// Floor-prune: a cut that cannot strictly beat best.Matched+margin
+		// bails out mid-scan instead of completing a full coverage pass.
+		// Accepted candidates always carry exact counts (pruning only fires
+		// when the true count is <= floor; see coverage.go).
+		matched := evaluateCoverageWithFloorCtl(re, eval, best.Matched+margin-1, ctl)
 		if matched-best.Matched < margin {
 			continue
 		}
@@ -1202,7 +1232,7 @@ func literalKeywords(pieces []tilePiece) int {
 // shape explains the input. Shapes are taken in descending matched order;
 // each must newly explain at least tiledUnionMinBranchLines lines and carry
 // a high-confidence field.
-func tiledUnion(shapes []*tileCandidate, eval []string, bestCov float64, diag io.Writer) *DiscoveredPattern {
+func tiledUnion(shapes []*tileCandidate, eval []string, bestCov float64, diag io.Writer, ctl *scanCtl) *DiscoveredPattern {
 	if len(shapes) < 2 {
 		return nil
 	}
@@ -1255,7 +1285,7 @@ func tiledUnion(shapes []*tileCandidate, eval []string, bestCov float64, diag io
 		fmt.Fprintf(diag, "tiling union: failed to compile: %v\n", err)
 		return nil
 	}
-	matched := EvaluateCoverage(re, eval)
+	matched := evaluateCoverageCtl(re, eval, ctl)
 	cov := ratio(matched, len(eval))
 	fmt.Fprintf(diag, "tiling union: branches=%d matched=%d/%d coverage=%.3f (best single=%.3f)\n",
 		len(branches), matched, len(eval), cov, bestCov)
@@ -1273,13 +1303,13 @@ func tiledUnion(shapes []*tileCandidate, eval []string, bestCov float64, diag io
 }
 
 // tryTiling is the stage entry point, mirroring tryStructured/tryTextEnvelope.
-func tryTiling(sample, all []string, diag io.Writer) *DiscoveredPattern {
+func tryTiling(sample, all []string, diag io.Writer, ctl *scanCtl) *DiscoveredPattern {
 	if len(all) < tilingMinLines {
 		fmt.Fprintf(diag, "tiling: skipped, %d lines < %d evidence floor\n", len(all), tilingMinLines)
 		return nil
 	}
-	shapes := tileShapes(sample, all, tileShapeTemplates)
-	cand := bestTiling(shapes, all)
+	shapes := tileShapes(sample, all, tileShapeTemplates, ctl)
+	cand := bestTiling(shapes, all, ctl)
 	if cand == nil {
 		return nil
 	}
@@ -1287,7 +1317,7 @@ func tryTiling(sample, all []string, diag io.Writer) *DiscoveredPattern {
 	// No single shape explains the input: try a union of complementary
 	// shapes before giving up (small multi-format streams).
 	if cov < tiledUnionTrigger {
-		if u := tiledUnion(shapes, all, cov, diag); u != nil {
+		if u := tiledUnion(shapes, all, cov, diag, ctl); u != nil {
 			return u
 		}
 	}

@@ -1,0 +1,6 @@
+{
+  "case_name": "suricata_eve_json_extra",
+  "expected_grok": "\\{\\s*\"timestamp\"\\s*:\\s*%{QUOTEDSTRING:timestamp}\\s*,\\s*\"event_type\"\\s*:\\s*%{QUOTEDSTRING:event_type}\\s*,\\s*\"src_ip\"\\s*:\\s*%{QUOTEDSTRING:client_ip}\\s*,\\s*\"dest_ip\"\\s*:\\s*%{QUOTEDSTRING:dest_ip}\\s*,\\s*\"proto\"\\s*:\\s*%{QUOTEDSTRING:proto}\\s*,\\s*\"alert\"\\s*:\\s*%{DATA:alert}\\s*\\}",
+  "expected_source": "structured:Suricata EVE",
+  "family": "suricata_eve_json"
+}

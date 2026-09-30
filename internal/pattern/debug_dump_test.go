@@ -26,7 +26,7 @@ func TestTileDump(t *testing.T) {
 		}
 		expected, _ := loadExpectedGrok(name)
 		fmt.Printf("=== %s ===\nline:     %s\nexpected: %s\n", name, input[0], expected)
-		if dp := tryTiling(input, input, io.Discard); dp != nil {
+		if dp := tryTiling(input, input, io.Discard, nil); dp != nil {
 			fmt.Printf("tiler:    %s\ncoverage: %.2f\n\n", dp.Grok, dp.Coverage)
 		} else {
 			fmt.Printf("tiler:    <nil>\n\n")

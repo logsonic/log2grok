@@ -1,0 +1,6 @@
+{
+  "case_name": "hdfs_extra",
+  "expected_grok": "%{HDFS_DATE:date} %{HDFS_TIME:time} %{INT:thread} %{LOGLEVEL:level} %{NOTSPACE:component}: %{GREEDYDATA:message}",
+  "expected_source": "library:HDFS",
+  "family": "hdfs"
+}

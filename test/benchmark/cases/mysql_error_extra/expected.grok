@@ -1,0 +1,1 @@
+%{TIMESTAMP_ISO8601:timestamp} %{INT:thread_id} \[%{LOGLEVEL:level}\] \[%{NOTSPACE:error_code}\] \[%{WORD:component}\] %{GREEDYDATA:message}

@@ -1,0 +1,6 @@
+{
+  "case_name": "aws_vpc_flow_extra",
+  "expected_grok": "%{INT:version} %{NOTSPACE:account_id} %{NOTSPACE:interface_id} %{IP:src_addr} %{IP:dst_addr} %{INT:src_port} %{INT:dst_port} %{INT:protocol} %{INT:packets} %{INT:bytes} %{INT:start} %{INT:end} %{WORD:action} %{WORD:log_status}(?: %{GREEDYDATA:extra_fields})?",
+  "expected_source": "library:AWS VPC Flow Logs",
+  "family": "aws_vpc_flow"
+}

@@ -1,0 +1,15 @@
+Oct 10 13:00:00 dhcp-0 dhcpd: DHCPDISCOVER from 00:11:22:33:44:00 via eth0
+Oct 11 13:00:01 dhcp-1 dhcpd: DHCPDISCOVER from 00:11:22:33:44:01 via eth0
+Oct 12 13:00:02 dhcp-2 dhcpd: DHCPDISCOVER from 00:11:22:33:44:02 via eth0
+Oct 13 13:00:03 dhcp-3 dhcpd: DHCPDISCOVER from 00:11:22:33:44:03 via eth0
+Oct 14 13:00:04 dhcp-4 dhcpd: DHCPDISCOVER from 00:11:22:33:44:04 via eth0
+Oct 15 13:00:05 dhcp-5 dhcpd: DHCPDISCOVER from 00:11:22:33:44:05 via eth0
+Oct 16 13:00:06 dhcp-6 dhcpd: DHCPDISCOVER from 00:11:22:33:44:06 via eth0
+Oct 17 13:00:07 dhcp-7 dhcpd: DHCPDISCOVER from 00:11:22:33:44:07 via eth0
+Oct 18 13:00:08 dhcp-8 dhcpd: DHCPDISCOVER from 00:11:22:33:44:08 via eth0
+Oct 19 13:00:09 dhcp-9 dhcpd: DHCPDISCOVER from 00:11:22:33:44:09 via eth0
+Oct 20 13:00:10 dhcp-10 dhcpd: DHCPDISCOVER from 00:11:22:33:44:0a via eth0
+Oct 21 13:00:11 dhcp-11 dhcpd: DHCPDISCOVER from 00:11:22:33:44:0b via eth0
+Oct 22 13:00:12 dhcp-12 dhcpd: DHCPDISCOVER from 00:11:22:33:44:0c via eth0
+Oct 23 13:00:13 dhcp-13 dhcpd: DHCPDISCOVER from 00:11:22:33:44:0d via eth0
+Oct 24 13:00:14 dhcp-14 dhcpd: DHCPDISCOVER from 00:11:22:33:44:0e via eth0

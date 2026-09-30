@@ -1,0 +1,6 @@
+{
+  "case_name": "leef_extra",
+  "expected_grok": "LEEF:%{NOTSPACE:leef_version}\\|%{DATA:vendor}\\|%{DATA:product}\\|%{DATA:product_version}\\|%{DATA:event_id}\\|%{GREEDYDATA:extensions}",
+  "expected_source": "structured:LEEF",
+  "family": "leef"
+}

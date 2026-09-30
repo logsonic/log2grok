@@ -1,0 +1,6 @@
+{
+  "case_name": "zap_console_extra",
+  "expected_grok": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+%{NOTSPACE:logger}\\s+%{GREEDYDATA:message}",
+  "expected_source": "library:Python Logging",
+  "family": "zap_console"
+}

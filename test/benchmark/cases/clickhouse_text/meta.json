@@ -1,0 +1,6 @@
+{
+  "case_name": "clickhouse_text",
+  "expected_grok": "%{YEAR:year}\\.%{MONTHNUM2:month}\\.%{MONTHDAY2:monthday} %{TIME:time} \\[ %{INT:n} \\] \\{%{NOTSPACE:value}\\} <Information> Application: Ready for connections",
+  "expected_source": "inferred:Tiled",
+  "family": "clickhouse"
+}

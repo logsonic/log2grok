@@ -1,0 +1,6 @@
+{
+  "case_name": "syslog_rfc3164_extra",
+  "expected_grok": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} sshd\\[%{POSINT:pid}\\]: %{GREEDYDATA:message}",
+  "expected_source": "library:SSH Authentication",
+  "family": "syslog_rfc3164"
+}

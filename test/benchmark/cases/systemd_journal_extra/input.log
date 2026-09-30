@@ -1,0 +1,15 @@
+Oct 10 13:00:00 host-0 systemd[1]: Started Session 0 of user deploy.
+Oct 11 13:00:01 host-1 systemd[1]: Started Session 1 of user deploy.
+Oct 12 13:00:02 host-2 systemd[1]: Started Session 2 of user deploy.
+Oct 13 13:00:03 host-3 systemd[1]: Started Session 3 of user deploy.
+Oct 14 13:00:04 host-4 systemd[1]: Started Session 4 of user deploy.
+Oct 15 13:00:05 host-5 systemd[1]: Started Session 5 of user deploy.
+Oct 16 13:00:06 host-6 systemd[1]: Started Session 6 of user deploy.
+Oct 17 13:00:07 host-7 systemd[1]: Started Session 7 of user deploy.
+Oct 18 13:00:08 host-8 systemd[1]: Started Session 8 of user deploy.
+Oct 19 13:00:09 host-9 systemd[1]: Started Session 9 of user deploy.
+Oct 20 13:00:10 host-10 systemd[1]: Started Session 10 of user deploy.
+Oct 21 13:00:11 host-11 systemd[1]: Started Session 11 of user deploy.
+Oct 22 13:00:12 host-12 systemd[1]: Started Session 12 of user deploy.
+Oct 23 13:00:13 host-13 systemd[1]: Started Session 13 of user deploy.
+Oct 24 13:00:14 host-14 systemd[1]: Started Session 14 of user deploy.

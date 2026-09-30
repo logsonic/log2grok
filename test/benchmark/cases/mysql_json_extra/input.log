@@ -1,0 +1,15 @@
+{"ts": 1728600000000, "level": "ERROR", "errSymbol": "ER_ACCESS_DENIED_ERROR", "errCode": 1045, "thread": 100, "msg": "Access denied for user 'app'@'10.0.0.0'"}
+{"ts": 1728600000001, "level": "ERROR", "errSymbol": "ER_ACCESS_DENIED_ERROR", "errCode": 1045, "thread": 101, "msg": "Access denied for user 'app'@'10.0.0.1'"}
+{"ts": 1728600000002, "level": "ERROR", "errSymbol": "ER_ACCESS_DENIED_ERROR", "errCode": 1045, "thread": 102, "msg": "Access denied for user 'app'@'10.0.0.2'"}
+{"ts": 1728600000003, "level": "ERROR", "errSymbol": "ER_ACCESS_DENIED_ERROR", "errCode": 1045, "thread": 103, "msg": "Access denied for user 'app'@'10.0.0.3'"}
+{"ts": 1728600000004, "level": "ERROR", "errSymbol": "ER_ACCESS_DENIED_ERROR", "errCode": 1045, "thread": 104, "msg": "Access denied for user 'app'@'10.0.0.4'"}
+{"ts": 1728600000005, "level": "ERROR", "errSymbol": "ER_ACCESS_DENIED_ERROR", "errCode": 1045, "thread": 105, "msg": "Access denied for user 'app'@'10.0.0.5'"}
+{"ts": 1728600000006, "level": "ERROR", "errSymbol": "ER_ACCESS_DENIED_ERROR", "errCode": 1045, "thread": 106, "msg": "Access denied for user 'app'@'10.0.0.6'"}
+{"ts": 1728600000007, "level": "ERROR", "errSymbol": "ER_ACCESS_DENIED_ERROR", "errCode": 1045, "thread": 107, "msg": "Access denied for user 'app'@'10.0.0.7'"}
+{"ts": 1728600000008, "level": "ERROR", "errSymbol": "ER_ACCESS_DENIED_ERROR", "errCode": 1045, "thread": 108, "msg": "Access denied for user 'app'@'10.0.0.8'"}
+{"ts": 1728600000009, "level": "ERROR", "errSymbol": "ER_ACCESS_DENIED_ERROR", "errCode": 1045, "thread": 109, "msg": "Access denied for user 'app'@'10.0.0.9'"}
+{"ts": 1728600000010, "level": "ERROR", "errSymbol": "ER_ACCESS_DENIED_ERROR", "errCode": 1045, "thread": 110, "msg": "Access denied for user 'app'@'10.0.0.10'"}
+{"ts": 1728600000011, "level": "ERROR", "errSymbol": "ER_ACCESS_DENIED_ERROR", "errCode": 1045, "thread": 111, "msg": "Access denied for user 'app'@'10.0.0.11'"}
+{"ts": 1728600000012, "level": "ERROR", "errSymbol": "ER_ACCESS_DENIED_ERROR", "errCode": 1045, "thread": 112, "msg": "Access denied for user 'app'@'10.0.0.12'"}
+{"ts": 1728600000013, "level": "ERROR", "errSymbol": "ER_ACCESS_DENIED_ERROR", "errCode": 1045, "thread": 113, "msg": "Access denied for user 'app'@'10.0.0.13'"}
+{"ts": 1728600000014, "level": "ERROR", "errSymbol": "ER_ACCESS_DENIED_ERROR", "errCode": 1045, "thread": 114, "msg": "Access denied for user 'app'@'10.0.0.14'"}

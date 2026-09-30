@@ -1,0 +1,1 @@
+\[%{MONTHDAY:monthday}-%{MONTH:month}-%{YEAR:year} %{TIME:time}\] %{LOGLEVEL:level}: \[pool www\] child %{INT:n} said into stderr: "%{LOGLEVEL:level_2}: PHP message: request %{INT:n_2}"

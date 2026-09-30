@@ -1,0 +1,1 @@
+\{\s*"messageType"\s*:\s*%{QUOTEDSTRING:messagetype}\s*,\s*"owner"\s*:\s*%{QUOTEDSTRING:owner}\s*,\s*"logGroup"\s*:\s*%{QUOTEDSTRING:loggroup}\s*,\s*"logStream"\s*:\s*%{QUOTEDSTRING:logstream}\s*,\s*"subscriptionFilters"\s*:\s*%{DATA:subscriptionfilters}\s*,\s*"logEvents"\s*:\s*%{DATA:logevents}\s*\}

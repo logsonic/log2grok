@@ -1,0 +1,15 @@
+web-0  | [2024-10-10T13:00:00.000Z] INFO logger_0: started component 0
+web-1  | [2024-10-10T13:00:01.001Z] INFO logger_1: started component 1
+web-2  | [2024-10-10T13:00:02.002Z] INFO logger_2: started component 2
+web-3  | [2024-10-10T13:00:03.003Z] INFO logger_3: started component 3
+web-4  | [2024-10-10T13:00:04.004Z] INFO logger_4: started component 4
+web-5  | [2024-10-10T13:00:05.005Z] INFO logger_5: started component 5
+web-6  | [2024-10-10T13:00:06.006Z] INFO logger_6: started component 6
+web-7  | [2024-10-10T13:00:07.007Z] INFO logger_7: started component 7
+web-8  | [2024-10-10T13:00:08.008Z] INFO logger_8: started component 8
+web-9  | [2024-10-10T13:00:09.009Z] INFO logger_9: started component 9
+web-10  | [2024-10-10T13:00:10.010Z] INFO logger_10: started component 10
+web-11  | [2024-10-10T13:00:11.011Z] INFO logger_11: started component 11
+web-12  | [2024-10-10T13:00:12.012Z] INFO logger_12: started component 12
+web-13  | [2024-10-10T13:00:13.013Z] INFO logger_13: started component 13
+web-14  | [2024-10-10T13:00:14.014Z] INFO logger_14: started component 14

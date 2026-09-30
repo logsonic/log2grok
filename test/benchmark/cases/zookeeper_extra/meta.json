@@ -1,0 +1,6 @@
+{
+  "case_name": "zookeeper_extra",
+  "expected_grok": "%{TIMESTAMP_ISO8601:timestamp}(?: \\[myid:?(?:%{INT:myid})?\\])? - %{LOGLEVEL:level}\\s+\\[%{DATA:thread}\\] - %{GREEDYDATA:message}",
+  "expected_source": "library:ZooKeeper",
+  "family": "zookeeper"
+}

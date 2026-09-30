@@ -1,0 +1,6 @@
+{
+  "case_name": "php_fpm_pool",
+  "expected_grok": "\\[%{MONTHDAY:monthday}-%{MONTH:month}-%{YEAR:year} %{TIME:time}\\] %{LOGLEVEL:level}: \\[pool www\\] child %{INT:n} said into stderr: \"%{LOGLEVEL:level_2}: PHP message: request %{INT:n_2}\"",
+  "expected_source": "inferred:Tiled",
+  "family": "php_fpm"
+}

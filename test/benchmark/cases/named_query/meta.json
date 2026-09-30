@@ -1,0 +1,6 @@
+{
+  "case_name": "named_query",
+  "expected_grok": "%{MONTHDAY:monthday}-%{MONTH:month}-%{YEAR:year} %{TIME:time} queries: %{LOGLEVEL:queries}: client %{NOTSPACE:value} %{IPV4:ip}#%{INT:n}: query: example\\.com IN A \\+",
+  "expected_source": "inferred:Tiled",
+  "family": "named"
+}

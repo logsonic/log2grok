@@ -1,0 +1,15 @@
+time=2024-10-10T13:00:00Z level=INFO msg="request completed" method=GET path=/api/0 status=200 duration=0ms
+time=2024-10-10T13:00:01Z level=INFO msg="request completed" method=GET path=/api/1 status=200 duration=1ms
+time=2024-10-10T13:00:02Z level=INFO msg="request completed" method=GET path=/api/2 status=200 duration=2ms
+time=2024-10-10T13:00:03Z level=INFO msg="request completed" method=GET path=/api/3 status=200 duration=3ms
+time=2024-10-10T13:00:04Z level=INFO msg="request completed" method=GET path=/api/4 status=200 duration=4ms
+time=2024-10-10T13:00:05Z level=INFO msg="request completed" method=GET path=/api/5 status=200 duration=5ms
+time=2024-10-10T13:00:06Z level=INFO msg="request completed" method=GET path=/api/6 status=200 duration=6ms
+time=2024-10-10T13:00:07Z level=INFO msg="request completed" method=GET path=/api/7 status=200 duration=7ms
+time=2024-10-10T13:00:08Z level=INFO msg="request completed" method=GET path=/api/8 status=200 duration=8ms
+time=2024-10-10T13:00:09Z level=INFO msg="request completed" method=GET path=/api/9 status=200 duration=9ms
+time=2024-10-10T13:00:10Z level=INFO msg="request completed" method=GET path=/api/10 status=200 duration=10ms
+time=2024-10-10T13:00:11Z level=INFO msg="request completed" method=GET path=/api/11 status=200 duration=11ms
+time=2024-10-10T13:00:12Z level=INFO msg="request completed" method=GET path=/api/12 status=200 duration=12ms
+time=2024-10-10T13:00:13Z level=INFO msg="request completed" method=GET path=/api/13 status=200 duration=13ms
+time=2024-10-10T13:00:14Z level=INFO msg="request completed" method=GET path=/api/14 status=200 duration=14ms

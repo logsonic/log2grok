@@ -1,0 +1,6 @@
+{
+  "case_name": "cron_extra",
+  "expected_grok": "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} CRON\\[%{POSINT:pid}\\]: %{GREEDYDATA:message}",
+  "expected_source": "library:Cron Log",
+  "family": "cron"
+}

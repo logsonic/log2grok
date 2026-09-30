@@ -59,7 +59,9 @@ func main() {
 	}
 
 	if *multi {
-		if err := runMulti(lines, *threshold, *target, *quiet, *verbose, diag); err != nil {
+		err := runMulti(lines, *threshold, *target, *quiet, *verbose, diag)
+		lines = nil // discovery sampled internally; release the full input
+		if err != nil {
 			if errors.Is(err, l2g.ErrEmptyInput) {
 				fmt.Fprintln(os.Stderr, "error: input has no non-empty lines")
 				os.Exit(1)
@@ -71,6 +73,7 @@ func main() {
 	}
 
 	dp, err := discoverLines(lines, truncated, *threshold, *verbose, diag)
+	lines = nil // discovery sampled internally; release the full input
 	if err != nil {
 		if errors.Is(err, l2g.ErrEmptyInput) {
 			fmt.Fprintln(os.Stderr, "error: input has no non-empty lines")

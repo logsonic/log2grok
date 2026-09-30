@@ -1,0 +1,1 @@
+\{\s*"timestamp"\s*:\s*%{QUOTEDSTRING:timestamp}\s*,\s*"level"\s*:\s*%{QUOTEDSTRING:level}\s*,\s*"message"\s*:\s*%{QUOTEDSTRING:message}\s*,\s*"logger"\s*:\s*%{QUOTEDSTRING:logger}\s*,\s*"culprit"\s*:\s*%{QUOTEDSTRING:culprit}\s*,\s*"event_id"\s*:\s*%{QUOTEDSTRING:event_id}\s*\}

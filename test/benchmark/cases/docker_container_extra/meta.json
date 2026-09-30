@@ -1,0 +1,6 @@
+{
+  "case_name": "docker_container_extra",
+  "expected_grok": "%{TIMESTAMP_ISO8601:timestamp}\\s+%{DOCKER_ID:container_id}\\s+%{NOTSPACE:container_name}\\s+%{GREEDYDATA:message}",
+  "expected_source": "library:Docker Container",
+  "family": "docker_container"
+}

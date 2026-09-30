@@ -189,3 +189,187 @@ func TestDiscoverPrefersLibraryOverInferredTextEnvelope(t *testing.T) {
 		t.Fatalf("grok = %q, want Consul library pattern", dp.Grok)
 	}
 }
+
+// Estimated (sampled) results must keep their extrapolated figures after the
+// full input is released — the release must not change any output, nor touch
+// the caller-owned input slice.
+func TestEstimatedResultUnchangedAfterFullRelease(t *testing.T) {
+	oldCap := coverageEvalCap
+	coverageEvalCap = 64
+	defer func() { coverageEvalCap = oldCap }()
+
+	var lines []string
+	for i := 0; i < 200; i++ {
+		lines = append(lines, `10.0.0.7 - alice [15/Jan/2025:10:23:45 +0000] "GET /index.html HTTP/1.1" 200 1024`)
+	}
+	orig := append([]string(nil), lines...)
+
+	dp, err := Discover(lines, Options{LibraryThreshold: 0.85})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !dp.Estimated {
+		t.Fatal("expected estimated result with lowered cap")
+	}
+	if dp.TotalLines != 200 || dp.MatchedCount <= 0 || dp.Coverage <= 0 {
+		t.Fatalf("bad extrapolated figures: %+v", dp)
+	}
+	if dp.Grok == "" {
+		t.Fatal("empty grok")
+	}
+	// Releasing internal references must never mutate caller-owned input.
+	for i := range lines {
+		if lines[i] != orig[i] {
+			t.Fatalf("Discover mutated caller input at line %d", i)
+		}
+	}
+}
+
+// dropFullInput must drop the full input only when it was sampled (estimated),
+// and must leave both references alone otherwise so the caller-owned slice
+// stays valid.
+func TestDropFullInput(t *testing.T) {
+	full := []string{"a", "b"}
+	normalized := normalizedInput{MatchLines: full}
+
+	dropFullInput(&full, &normalized, false)
+	if full == nil || normalized.MatchLines == nil {
+		t.Fatal("dropFullInput cleared input when estimated=false")
+	}
+
+	dropFullInput(&full, &normalized, true)
+	if full != nil || normalized.MatchLines != nil {
+		t.Fatal("dropFullInput did not clear input when estimated=true")
+	}
+}
+
+// When stage 1 (structured) auto-accepts, the library and inferred stages
+// must be aborted. The result must still be the stage-1 candidate,
+// byte-identical to the pre-cancellation behavior. We assert on the
+// coordinator's abort decision (stageAbortHook), which is synchronous and
+// therefore deterministic — a scan-level observation would only fire if a
+// lower stage happened to still be mid-scan.
+func TestDiscoverAbortsLowerStagesOnStructuredAutoAccept(t *testing.T) {
+	oldCap := coverageEvalCap
+	coverageEvalCap = 100000 // keep the exact-coverage path
+	defer func() { coverageEvalCap = oldCap }()
+
+	lines := []string{
+		`{"ts":"2025-01-15T10:23:45Z","level":"info","msg":"job 1"}`,
+		`{"ts":"2025-01-15T10:23:46Z","level":"info","msg":"job 2"}`,
+		`{"ts":"2025-01-15T10:23:47Z","level":"info","msg":"job 3"}`,
+	}
+	opts := Options{LibraryThreshold: 0.85}
+
+	aborted := make(chan string, 8)
+	oldHook := stageAbortHook
+	stageAbortHook = func(stage string) { aborted <- stage }
+	defer func() { stageAbortHook = oldHook }()
+
+	dp, err := Discover(lines, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dp.SourceFamily != "structured" {
+		t.Fatalf("expected structured auto-accept, got %s (%s)", dp.SourceFamily, dp.Source)
+	}
+	got := map[string]bool{}
+	for {
+		select {
+		case stage := <-aborted:
+			got[stage] = true
+			continue
+		default:
+		}
+		break
+	}
+	if !got["library"] || !got["inferred"] {
+		t.Fatalf("expected library and inferred to be aborted, got %v", got)
+	}
+}
+
+// And the inverse: with NO auto-accept, no stage may be aborted (aborted
+// partial counts would poison pickBetter).
+func TestDiscoverNoAbortWithoutAutoAccept(t *testing.T) {
+	oldCap := coverageEvalCap
+	coverageEvalCap = 100000
+	defer func() { coverageEvalCap = oldCap }()
+
+	// Heterogeneous lines: no stage reaches the 0.85 threshold.
+	lines := []string{
+		"user alice logged in from 10.0.0.1",
+		"backup finished with status 0",
+		"cache: 512 entries evicted",
+		"temperature reading 21.5 celsius",
+	}
+	opts := Options{LibraryThreshold: 0.999}
+
+	aborted := make(chan string, 8)
+	oldHook := stageAbortHook
+	stageAbortHook = func(stage string) { aborted <- stage }
+	defer func() { stageAbortHook = oldHook }()
+
+	if _, err := Discover(lines, opts); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case stage := <-aborted:
+		t.Fatalf("stage %q was aborted although no stage auto-accepted", stage)
+	default:
+	}
+}
+
+func TestStructuredAndLibrarySpecificity(t *testing.T) {
+	cases := []struct {
+		name string
+		dp   *DiscoveredPattern
+		want bool
+	}{
+		{"nil", nil, false},
+		{"logfmt blob", &DiscoveredPattern{Grok: `%{GREEDYDATA:kvpairs}`}, false},
+		{"keyless json", &DiscoveredPattern{Grok: `\{%{GREEDYDATA:json}\}`}, false},
+		{"csv columns", &DiscoveredPattern{Grok: `[^,]*,[^,]*,[^,]*`}, false},
+		{"typed", &DiscoveredPattern{Grok: `%{WORD:method} %{NOTSPACE:url}`}, true},
+	}
+	for _, tc := range cases {
+		if got := structuredHasTypedCapture(tc.dp); got != tc.want {
+			t.Errorf("structuredHasTypedCapture(%s) = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+
+	lib := []struct {
+		name string
+		dp   *DiscoveredPattern
+		want bool
+	}{
+		{"nil", nil, false},
+		{"generic fallback", &DiscoveredPattern{Source: "library:Generic Bracketed Timestamp", Grok: `\[?%{TIMESTAMP_ISO8601:timestamp}\]?\s+%{GREEDYDATA:message}`}, false},
+		{"single field", &DiscoveredPattern{Source: "library:Winston Text", Grok: `%{LOGLEVEL:level}: %{GREEDYDATA:message}`}, false},
+		{"specific", &DiscoveredPattern{Source: "library:Nginx Error", Grok: `%{YEAR}/%{MONTHNUM}/%{MONTHDAY} %{TIME:time} \[%{LOGLEVEL:level}\] %{INT:pid}#%{INT:tid}: %{GREEDYDATA:message}`}, true},
+	}
+	for _, tc := range lib {
+		if got := librarySpecific(tc.dp); got != tc.want {
+			t.Errorf("librarySpecific(%s) = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// A contentless structured parse (logfmt/CSV) must not pre-empt a specific
+// curated library pattern for the same lines.
+func TestDiscoverPrefersSpecificLibraryOverContentlessStructured(t *testing.T) {
+	lines := []string{
+		`type=SYSCALL msg=audit(1728600000.001:101): arch=c000003e syscall=59 success=yes exit=0`,
+		`type=SYSCALL msg=audit(1728600000.002:102): arch=c000003e syscall=59 success=yes exit=0`,
+		`type=SYSCALL msg=audit(1728600000.003:103): arch=c000003e syscall=59 success=yes exit=0`,
+	}
+	dp, err := Discover(lines, Options{LibraryThreshold: 0.75})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dp.SourceFamily != "library" {
+		t.Fatalf("source = %q, want a curated library pattern (logfmt must not win)", dp.Source)
+	}
+	if dp.Grok == `%{GREEDYDATA:kvpairs}` {
+		t.Fatal("contentless logfmt blob pre-empted the specific Auditd pattern")
+	}
+}
