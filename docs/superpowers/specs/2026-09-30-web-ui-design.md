@@ -91,12 +91,16 @@ library defaults (`LibraryThreshold: 0.85`).
     "truncated": false,
     "estimated": false
   },
+  "matches": [true, true, false],
   "meta": { "lines": 4900, "elapsedMs": 12 }
 }
 ```
 
 `lines` is the count of non-empty input lines; `grok` is always a non-empty
-string on success.
+string on success. `matches` is a per-line boolean aligned 1:1 with the input
+split on `\n` (one entry per rendered line, in the same order; empty lines are
+`false`), so the UI can highlight which lines the pattern matched. The number of
+`true` entries equals `pattern.matched`.
 
 ### Error response (`4xx`/`5xx`)
 
@@ -140,6 +144,11 @@ All responses set `Content-Type: application/json; charset=utf-8`.
 - **Result card:** the Grok pattern in monospace, prominent, with a **Copy**
   button and copy feedback; a meta row with source/family badges and a coverage
   bar (`matched` / `total`); notes/warning per §5.
+- **Per-line highlighting:** after discovery, the input lines are highlighted in
+  place — matched lines get one distinct background, unmatched lines another —
+  with a legend. Highlighting uses an aligned, `aria-hidden` backdrop layer
+  under the textarea (a `<textarea>` cannot style individual lines), is cleared
+  while editing, and is bounded to a few thousand lines.
 - **Visual direction (frontend-design):** restrained single-accent palette,
   subtle borders and shadows, refined type scale, system UI font stack for
   chrome and a monospace stack for patterns, dark mode via

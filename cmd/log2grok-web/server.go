@@ -75,6 +75,7 @@ type metaPayload struct {
 type discoverResponse struct {
 	OK      bool           `json:"ok"`
 	Pattern patternPayload `json:"pattern"`
+	Matches []bool         `json:"matches"`
 	Meta    metaPayload    `json:"meta"`
 }
 
@@ -194,6 +195,19 @@ func handleDiscover(w http.ResponseWriter, r *http.Request, maxBody int64) {
 		return
 	}
 
+	// Per-line match bitmap for the UI, aligned 1:1 with the split input so
+	// the client can highlight matched lines. The pattern is the same one
+	// coverage was measured with, so the true count equals pattern.matched.
+	matches := make([]bool, len(lines))
+	if re, cerr := l2g.CompileGrok(dp.Grok, dp.CustomPatterns); cerr == nil {
+		for i, line := range lines {
+			if line == "" {
+				continue // the library excludes empty lines from its counts
+			}
+			matches[i] = re.MatchString(line)
+		}
+	}
+
 	writeJSON(w, http.StatusOK, discoverResponse{
 		OK: true,
 		Pattern: patternPayload{
@@ -206,6 +220,7 @@ func handleDiscover(w http.ResponseWriter, r *http.Request, maxBody int64) {
 			Truncated:    dp.Truncated,
 			Estimated:    dp.Estimated,
 		},
+		Matches: matches,
 		Meta: metaPayload{
 			Lines:     nonEmptyCount(lines),
 			ElapsedMs: time.Since(started).Milliseconds(),

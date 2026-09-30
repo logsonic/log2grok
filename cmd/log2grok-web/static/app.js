@@ -20,7 +20,9 @@ const EXAMPLES = {
 
 const el = {
   logs: document.getElementById("logs"),
+  logLines: document.getElementById("logLines"),
   lineCount: document.getElementById("lineCount"),
+  legend: document.getElementById("legend"),
   clear: document.getElementById("clear"),
   discover: document.getElementById("discover"),
   examples: document.getElementById("examples"),
@@ -36,6 +38,78 @@ const el = {
 
 function countLines(text) {
   return text.split("\n").filter((line) => line.trim() !== "").length;
+}
+
+// Per-line highlighting is done with a transparent backdrop layer aligned
+// under the textarea. Bounded so a huge paste cannot create a huge DOM.
+const MAX_HIGHLIGHT_LINES = 2000;
+const MAX_HIGHLIGHT_CHARS = 500000;
+const EDITOR_MAX_PX = 420;
+
+let currentLines = [];
+let lastMatches = null;
+
+// splitLogLines mirrors the server's splitLines: split on \n, drop one
+// trailing \r per line, drop trailing empty lines. Its length must equal the
+// server's matches array so line i maps to matches[i].
+function splitLogLines(text) {
+  if (text === "") return [];
+  const lines = text.split("\n").map((line) => line.replace(/\r$/, ""));
+  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  return lines;
+}
+
+function renderLogLines(text) {
+  el.legend.hidden = true;
+  if (text.length > MAX_HIGHLIGHT_CHARS) {
+    currentLines = [];
+    el.logLines.replaceChildren();
+    return;
+  }
+  const lines = splitLogLines(text);
+  if (lines.length > MAX_HIGHLIGHT_LINES) {
+    currentLines = [];
+    el.logLines.replaceChildren();
+    return;
+  }
+  currentLines = lines;
+  const frag = document.createDocumentFragment();
+  for (const line of lines) {
+    const div = document.createElement("div");
+    div.className = "logline";
+    div.textContent = line === "" ? "\u200b" : line;
+    frag.appendChild(div);
+  }
+  el.logLines.replaceChildren(frag);
+  el.logLines.scrollTop = el.logs.scrollTop;
+}
+
+function clearHighlights() {
+  lastMatches = null;
+  for (const line of el.logLines.children) line.classList.remove("is-match", "is-miss");
+  el.legend.hidden = true;
+}
+
+function applyMatches(matches) {
+  const lines = el.logLines.children;
+  if (!matches || matches.length !== lines.length) {
+    clearHighlights();
+    return;
+  }
+  for (let i = 0; i < lines.length; i++) {
+    const blank = currentLines[i] === "";
+    lines[i].classList.toggle("is-match", !blank && matches[i]);
+    lines[i].classList.toggle("is-miss", !blank && !matches[i]);
+  }
+  el.legend.hidden = lines.length === 0;
+}
+
+function autosize() {
+  el.logs.style.height = "auto";
+  const full = el.logs.scrollHeight;
+  el.logs.style.height = Math.min(full, EDITOR_MAX_PX) + "px";
+  el.logs.style.overflowY = full > EDITOR_MAX_PX ? "auto" : "hidden";
+  el.logLines.scrollTop = el.logs.scrollTop;
 }
 
 function updateCount() {
@@ -96,6 +170,9 @@ function render(data) {
     li.textContent = text;
     el.notes.appendChild(li);
   }
+
+  lastMatches = data.matches || null;
+  applyMatches(lastMatches);
 }
 
 async function discover() {
@@ -130,10 +207,20 @@ el.clear.addEventListener("click", () => {
   el.logs.value = "";
   clearFeedback();
   el.result.hidden = true;
+  renderLogLines("");
+  autosize();
   updateCount();
   el.logs.focus();
 });
-el.logs.addEventListener("input", updateCount);
+el.logs.addEventListener("input", () => {
+  clearHighlights();
+  renderLogLines(el.logs.value);
+  autosize();
+  updateCount();
+});
+el.logs.addEventListener("scroll", () => {
+  el.logLines.scrollTop = el.logs.scrollTop;
+});
 el.logs.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
     event.preventDefault();
@@ -144,6 +231,9 @@ el.examples.addEventListener("click", (event) => {
   const chip = event.target.closest("[data-example]");
   if (!chip) return;
   el.logs.value = EXAMPLES[chip.dataset.example] || "";
+  clearHighlights();
+  renderLogLines(el.logs.value);
+  autosize();
   updateCount();
   discover();
 });
@@ -157,4 +247,16 @@ el.copy.addEventListener("click", async () => {
   setTimeout(() => { el.copy.textContent = "Copy"; }, 1500);
 });
 
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    renderLogLines(el.logs.value);
+    if (lastMatches) applyMatches(lastMatches);
+    autosize();
+  }, 150);
+});
+
+renderLogLines("");
+autosize();
 updateCount();

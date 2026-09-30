@@ -16,11 +16,20 @@
 
     <section class="panel" aria-label="Log input">
       <label class="field" for="logs">Your logs</label>
-      <textarea id="logs" class="editor" rows="10" spellcheck="false"
-        placeholder="10.0.0.1 - alice [15/Jan/2025:10:23:45 +0000] &quot;GET /index.html HTTP/1.1&quot; 200 1024"></textarea>
+      <div class="editor-wrap">
+        <div id="logLines" class="editor-lines" aria-hidden="true"></div>
+        <textarea id="logs" class="editor" rows="10" spellcheck="false"
+          placeholder="10.0.0.1 - alice [15/Jan/2025:10:23:45 +0000] &quot;GET /index.html HTTP/1.1&quot; 200 1024"></textarea>
+      </div>
 
       <div class="toolbar">
-        <span id="lineCount" class="counter" aria-live="polite">0 lines</span>
+        <div class="toolbar__meta">
+          <span id="lineCount" class="counter" aria-live="polite">0 lines</span>
+          <span id="legend" class="legend" hidden>
+            <span class="legend__item"><span class="swatch swatch--match"></span>matched</span>
+            <span class="legend__item"><span class="swatch swatch--miss"></span>unmatched</span>
+          </span>
+        </div>
         <div class="toolbar__actions">
           <button id="clear" type="button" class="btn btn--ghost">Clear</button>
           <button id="discover" type="button" class="btn btn--primary">Discover pattern</button>

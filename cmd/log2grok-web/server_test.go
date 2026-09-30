@@ -297,3 +297,50 @@ func TestAppServed(t *testing.T) {
 		}
 	}
 }
+
+// The response must carry a per-line match bitmap aligned 1:1 with the lines
+// the client renders (same split as splitLines), so the UI can highlight
+// matched lines. The count of true entries must agree with pattern.matched.
+func TestDiscoverReportsPerLineMatches(t *testing.T) {
+	cases := []struct {
+		name string
+		logs string
+	}{
+		{"nginx", nginxSample},
+		{"mixed", nginxSample + "\n" + `{"a":1}` + "\n" + `{"a":2}`},
+		{"interior blank", "10.0.0.1 - a [15/Jan/2025:1:2:3 +0000] \"GET / HTTP/1.1\" 200 1\n\n" +
+			"10.0.0.2 - b [15/Jan/2025:1:2:4 +0000] \"GET / HTTP/1.1\" 200 2"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			rec := postJSON(t, testMux(), `{"logs":`+jsonString(tc.logs)+`}`)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+			}
+			var resp struct {
+				Pattern struct {
+					Matched int `json:"matched"`
+					Total   int `json:"total"`
+				} `json:"pattern"`
+				Matches []bool `json:"matches"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("invalid JSON: %v", err)
+			}
+			wantLen := len(splitLines(tc.logs))
+			if len(resp.Matches) != wantLen {
+				t.Fatalf("len(matches) = %d, want %d", len(resp.Matches), wantLen)
+			}
+			got := 0
+			for _, m := range resp.Matches {
+				if m {
+					got++
+				}
+			}
+			if got != resp.Pattern.Matched {
+				t.Fatalf("true entries = %d, want pattern.matched = %d", got, resp.Pattern.Matched)
+			}
+		})
+	}
+}
