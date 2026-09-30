@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -149,4 +150,105 @@ func TestDiscoverLongSingleLine(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
 	}
+}
+
+func decodeErr(t *testing.T, rec *httptest.ResponseRecorder) (int, string, string) {
+	t.Helper()
+	var resp struct {
+		OK    bool `json:"ok"`
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("error response is not valid JSON: %v; body=%s", err, rec.Body.String())
+	}
+	return rec.Code, resp.Error.Code, resp.Error.Message
+}
+
+func TestDiscoverEmptyInput(t *testing.T) {
+	for _, body := range []string{`{"logs":""}`, `{"logs":"   \n  \n\t"}`, `{}`} {
+		rec := postJSON(t, testMux(), body)
+		status, code, _ := decodeErr(t, rec)
+		if status != http.StatusBadRequest || code != "empty_input" {
+			t.Fatalf("body %s: got %d/%s, want 400/empty_input", body, status, code)
+		}
+	}
+}
+
+func TestDiscoverMalformedJSON(t *testing.T) {
+	rec := postJSON(t, testMux(), `{"logs":`)
+	status, code, _ := decodeErr(t, rec)
+	if status != http.StatusBadRequest || code != "bad_request" {
+		t.Fatalf("got %d/%s, want 400/bad_request", status, code)
+	}
+}
+
+func TestDiscoverWrongMethod(t *testing.T) {
+	rec := get(t, "/api/discover")
+	status, code, _ := decodeErr(t, rec)
+	if status != http.StatusMethodNotAllowed || code != "method_not_allowed" {
+		t.Fatalf("got %d/%s, want 405/method_not_allowed", status, code)
+	}
+}
+
+func TestDiscoverTooLarge(t *testing.T) {
+	mux := newMux(64) // tiny cap
+	rec := postJSON(t, mux, `{"logs":"`+strings.Repeat("a", 200)+`"}`)
+	status, code, _ := decodeErr(t, rec)
+	if status != http.StatusRequestEntityTooLarge || code != "too_large" {
+		t.Fatalf("got %d/%s, want 413/too_large", status, code)
+	}
+}
+
+func TestDiscoverInvalidUTF8(t *testing.T) {
+	// Raw invalid UTF-8 must be rejected cleanly, never panic.
+	req := httptest.NewRequest(http.MethodPost, "/api/discover",
+		strings.NewReader("{\"logs\":\"\xff\xfe\"}"))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	testMux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestDiscoverConcurrent(t *testing.T) {
+	mux := testMux()
+	body := `{"logs":` + jsonString(nginxSample) + `}`
+
+	rec := postJSON(t, mux, body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("baseline status = %d", rec.Code)
+	}
+	var base struct {
+		Pattern struct {
+			Grok string `json:"grok"`
+		} `json:"pattern"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &base)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			r := postJSON(t, mux, body)
+			if r.Code != http.StatusOK {
+				t.Errorf("concurrent status = %d", r.Code)
+				return
+			}
+			var got struct {
+				Pattern struct {
+					Grok string `json:"grok"`
+				} `json:"pattern"`
+			}
+			_ = json.Unmarshal(r.Body.Bytes(), &got)
+			if got.Pattern.Grok != base.Pattern.Grok {
+				t.Errorf("concurrent grok = %q, want %q", got.Pattern.Grok, base.Pattern.Grok)
+			}
+		}()
+	}
+	wg.Wait()
 }

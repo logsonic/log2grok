@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	l2g "github.com/logsonic/log2grok/pkg/log2grok"
 )
@@ -150,8 +151,31 @@ func classifyDiscoverError(err error) (int, string, string) {
 // --- handler ---
 
 func handleDiscover(w http.ResponseWriter, r *http.Request, maxBody int64) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Use POST for this endpoint.")
+		return
+	}
+
+	body := http.MaxBytesReader(w, r.Body, maxBody)
+	raw, err := io.ReadAll(body)
+	if err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "too_large", "Input is too large; paste at most 8 MiB.")
+			return
+		}
+		writeError(w, http.StatusBadRequest, "bad_request", "Could not read the request body.")
+		return
+	}
+	// encoding/json coerces invalid UTF-8 to the replacement character rather
+	// than failing, so validate the raw bytes explicitly (design spec §5).
+	if !utf8.Valid(raw) {
+		writeError(w, http.StatusBadRequest, "bad_request", "Input is not valid UTF-8.")
+		return
+	}
+
 	var req discoverRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.Unmarshal(raw, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", `Send JSON like {"logs": "..."}.`)
 		return
 	}
