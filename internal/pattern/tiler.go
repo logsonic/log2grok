@@ -91,14 +91,49 @@ var tileComposites = []*tileComposite{
 }
 
 var (
-	tileExprMu sync.Mutex
-	tileExprRe = map[string]*regexp.Regexp{}
+	compExprMu     sync.RWMutex
+	compExprVer    uint64
+	compExprRe     []*regexp.Regexp // parallel to tileComposites; nil = compile failed
+	compExprLoaded bool
 )
 
+// ensureCompExprs compiles every composite's Expr once per primitive-table
+// version. Called lazily (primitives may load after tiler var init) and on
+// the hot path of matchComposite — RLock-only after the first build.
+func ensureCompExprs() {
+	version := currentPatternStateVersion()
+	compExprMu.RLock()
+	ok := compExprLoaded && compExprVer == version
+	compExprMu.RUnlock()
+	if ok {
+		return
+	}
+
+	built := make([]*regexp.Regexp, len(tileComposites))
+	for i, c := range tileComposites {
+		re, err := CompileGrok(c.Expr, nil)
+		if err != nil {
+			re = nil // failed composites never match (old exprFullMatch semantics)
+		}
+		built[i] = re
+	}
+
+	compExprMu.Lock()
+	defer compExprMu.Unlock()
+	if compExprLoaded && compExprVer == version {
+		return
+	}
+	compExprRe = built
+	compExprVer = version
+	compExprLoaded = true
+}
+
 func resetTilerCaches() {
-	tileExprMu.Lock()
-	tileExprRe = map[string]*regexp.Regexp{}
-	tileExprMu.Unlock()
+	compExprMu.Lock()
+	compExprVer = 0
+	compExprRe = nil
+	compExprLoaded = false
+	compExprMu.Unlock()
 
 	tileSinglesMu.Lock()
 	tileSinglesVersion = 0
@@ -108,29 +143,15 @@ func resetTilerCaches() {
 	tileSinglesMu.Unlock()
 }
 
-// exprFullMatch reports whether the compiled Grok expression fully matches
-// span. Compiled expressions are cached; an expression that fails to compile
-// is treated as non-matching.
-func exprFullMatch(expr, span string) bool {
-	tileExprMu.Lock()
-	re, ok := tileExprRe[expr]
-	if !ok {
-		var err error
-		re, err = CompileGrok(expr, nil)
-		if err != nil {
-			re = nil
-		}
-		tileExprRe[expr] = re
-	}
-	tileExprMu.Unlock()
-	return re != nil && re.MatchString(span)
-}
-
 // matchComposite tries each composite at offset i, returning the first whose
 // prefix match ends on a token boundary AND whose Expr full-matches the span.
 func matchComposite(line string, i int) (*tileComposite, int) {
+	ensureCompExprs()
+	compExprMu.RLock()
+	defer compExprMu.RUnlock()
+
 	rest := line[i:]
-	for _, c := range tileComposites {
+	for ci, c := range tileComposites {
 		loc := c.prefix.FindStringIndex(rest)
 		if loc == nil || loc[1] == 0 {
 			continue
@@ -142,7 +163,7 @@ func matchComposite(line string, i int) (*tileComposite, int) {
 		if end < len(line) && !tileDelims[line[end]] && !tileSubSeps[line[end]] {
 			continue
 		}
-		if !exprFullMatch(c.Expr, rest[:loc[1]]) {
+		if compExprRe[ci] == nil || !compExprRe[ci].MatchString(rest[:loc[1]]) {
 			continue
 		}
 		return c, loc[1]
