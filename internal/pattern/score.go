@@ -37,7 +37,7 @@ func resetCompiledLibrary() {
 // Compile errors are recorded in libraryDiagErrs.
 func compiledKnownPatterns() []compiledPattern {
 	for {
-		version, patterns := knownPatternsSnapshotWithVersion()
+		version := currentPatternStateVersion()
 
 		compileMu.Lock()
 		if compiledLib != nil && compiledVersion == version {
@@ -46,6 +46,11 @@ func compiledKnownPatterns() []compiledPattern {
 			return out
 		}
 		compileMu.Unlock()
+
+		// Rebuild path only: clone the library now. This preserves the
+		// existing benign race window — a bump between the version read and
+		// the rebuild check discards the snapshot, same as before.
+		patterns := knownPatternsSnapshot()
 
 		compiled := make([]compiledPattern, 0, len(patterns))
 		var errs []error
