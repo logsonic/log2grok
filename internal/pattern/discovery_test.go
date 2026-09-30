@@ -190,6 +190,59 @@ func TestDiscoverPrefersLibraryOverInferredTextEnvelope(t *testing.T) {
 	}
 }
 
+// Estimated (sampled) results must keep their extrapolated figures after the
+// full input is released — the release must not change any output, nor touch
+// the caller-owned input slice.
+func TestEstimatedResultUnchangedAfterFullRelease(t *testing.T) {
+	oldCap := coverageEvalCap
+	coverageEvalCap = 64
+	defer func() { coverageEvalCap = oldCap }()
+
+	var lines []string
+	for i := 0; i < 200; i++ {
+		lines = append(lines, `10.0.0.7 - alice [15/Jan/2025:10:23:45 +0000] "GET /index.html HTTP/1.1" 200 1024`)
+	}
+	orig := append([]string(nil), lines...)
+
+	dp, err := Discover(lines, Options{LibraryThreshold: 0.85})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !dp.Estimated {
+		t.Fatal("expected estimated result with lowered cap")
+	}
+	if dp.TotalLines != 200 || dp.MatchedCount <= 0 || dp.Coverage <= 0 {
+		t.Fatalf("bad extrapolated figures: %+v", dp)
+	}
+	if dp.Grok == "" {
+		t.Fatal("empty grok")
+	}
+	// Releasing internal references must never mutate caller-owned input.
+	for i := range lines {
+		if lines[i] != orig[i] {
+			t.Fatalf("Discover mutated caller input at line %d", i)
+		}
+	}
+}
+
+// dropFullInput must drop the full input only when it was sampled (estimated),
+// and must leave both references alone otherwise so the caller-owned slice
+// stays valid.
+func TestDropFullInput(t *testing.T) {
+	full := []string{"a", "b"}
+	normalized := normalizedInput{MatchLines: full}
+
+	dropFullInput(&full, &normalized, false)
+	if full == nil || normalized.MatchLines == nil {
+		t.Fatal("dropFullInput cleared input when estimated=false")
+	}
+
+	dropFullInput(&full, &normalized, true)
+	if full != nil || normalized.MatchLines != nil {
+		t.Fatal("dropFullInput did not clear input when estimated=true")
+	}
+}
+
 // When stage 1 (structured) auto-accepts, the library and inferred stages
 // must be aborted. The result must still be the stage-1 candidate,
 // byte-identical to the pre-cancellation behavior. We assert on the

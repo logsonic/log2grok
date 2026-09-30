@@ -92,6 +92,7 @@ func DiscoverMulti(lines []string, opts Options) (*MultiPatternResult, error) {
 		estimated = true
 	}
 	sample := chooseSample(full, 4096)
+	dropFullInput(&full, &normalized, estimated)
 
 	pool := buildMultiCandidates(sample, evalSet, diag)
 	if len(pool) == 0 {

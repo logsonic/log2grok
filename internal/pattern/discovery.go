@@ -107,6 +107,10 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 
 	sample := chooseSample(full, 4096)
 
+	// The full input is no longer needed below; release it so a large input
+	// can be collected while the stages run.
+	dropFullInput(&full, &normalized, estimated)
+
 	// All three stages run concurrently. Each writes its diagnostics to a
 	// per-stage buffer so the merged output preserves stage-priority
 	// ordering regardless of completion order.
@@ -338,6 +342,20 @@ type normalizedInput struct {
 	BlankCount   int
 }
 
+// dropFullInput releases the package's references to the full normalized
+// input once sampling is done. When the input exceeded coverageEvalCap,
+// evalSet and sample are independent copies, so the full slice (which can be
+// ~110 MB at 1M lines) is no longer needed and may be garbage-collected
+// rather than living until Discover returns. A no-op when evalSet aliases
+// full (estimated == false): the caller still owns that slice.
+func dropFullInput(full *[]string, normalized *normalizedInput, estimated bool) {
+	if !estimated {
+		return
+	}
+	*full = nil
+	normalized.MatchLines = nil
+}
+
 func normalizeLines(lines []string) normalizedInput {
 	out := normalizedInput{OriginalSize: len(lines)}
 	for i, line := range lines {
@@ -466,6 +484,7 @@ func DiscoverTopK(lines []string, k int, opts Options) ([]*DiscoveredPattern, er
 	}
 
 	sample := chooseSample(full, 4096)
+	dropFullInput(&full, &normalized, estimated)
 
 	// Score every library pattern on the sample, then re-evaluate the
 	// top 24 on the eval set. We keep more candidates than the
