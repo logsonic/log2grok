@@ -2,9 +2,55 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>log2grok</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>log2grok — paste logs, get a Grok pattern</title>
+  <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-  <h1>log2grok</h1>
+  <main class="shell">
+    <header class="masthead">
+      <h1>log2grok</h1>
+      <p class="tagline">Paste log lines. Get the Grok pattern that explains them.</p>
+    </header>
+
+    <section class="panel" aria-label="Log input">
+      <label class="field" for="logs">Your logs</label>
+      <textarea id="logs" class="editor" rows="10" spellcheck="false"
+        placeholder="10.0.0.1 - alice [15/Jan/2025:10:23:45 +0000] &quot;GET /index.html HTTP/1.1&quot; 200 1024"></textarea>
+
+      <div class="toolbar">
+        <span id="lineCount" class="counter" aria-live="polite">0 lines</span>
+        <div class="toolbar__actions">
+          <button id="clear" type="button" class="btn btn--ghost">Clear</button>
+          <button id="discover" type="button" class="btn btn--primary">Discover pattern</button>
+        </div>
+      </div>
+
+      <div id="examples" class="examples" aria-label="Example inputs">
+        <span class="examples__label">Try:</span>
+        <button type="button" class="chip" data-example="nginx">nginx access</button>
+        <button type="button" class="chip" data-example="json">JSON app log</button>
+        <button type="button" class="chip" data-example="syslog">syslog</button>
+      </div>
+    </section>
+
+    <section id="feedback" class="feedback" role="status" aria-live="polite" hidden></section>
+
+    <section id="result" class="result" hidden>
+      <div class="result__head">
+        <h2 class="result__title">Pattern</h2>
+        <button id="copy" type="button" class="btn btn--ghost">Copy</button>
+      </div>
+      <pre id="pattern" class="pattern"><code></code></pre>
+      <div id="badges" class="badges"></div>
+      <div class="coverage">
+        <div class="coverage__bar"><span id="coverageFill" class="coverage__fill"></span></div>
+        <span id="coverageText" class="coverage__text"></span>
+      </div>
+      <ul id="notes" class="notes"></ul>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
 </body>
 </html>
