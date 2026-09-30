@@ -318,3 +318,58 @@ func TestDiscoverNoAbortWithoutAutoAccept(t *testing.T) {
 	default:
 	}
 }
+
+func TestStructuredAndLibrarySpecificity(t *testing.T) {
+	cases := []struct {
+		name string
+		dp   *DiscoveredPattern
+		want bool
+	}{
+		{"nil", nil, false},
+		{"logfmt blob", &DiscoveredPattern{Grok: `%{GREEDYDATA:kvpairs}`}, false},
+		{"keyless json", &DiscoveredPattern{Grok: `\{%{GREEDYDATA:json}\}`}, false},
+		{"csv columns", &DiscoveredPattern{Grok: `[^,]*,[^,]*,[^,]*`}, false},
+		{"typed", &DiscoveredPattern{Grok: `%{WORD:method} %{NOTSPACE:url}`}, true},
+	}
+	for _, tc := range cases {
+		if got := structuredHasTypedCapture(tc.dp); got != tc.want {
+			t.Errorf("structuredHasTypedCapture(%s) = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+
+	lib := []struct {
+		name string
+		dp   *DiscoveredPattern
+		want bool
+	}{
+		{"nil", nil, false},
+		{"generic fallback", &DiscoveredPattern{Source: "library:Generic Bracketed Timestamp", Grok: `\[?%{TIMESTAMP_ISO8601:timestamp}\]?\s+%{GREEDYDATA:message}`}, false},
+		{"single field", &DiscoveredPattern{Source: "library:Winston Text", Grok: `%{LOGLEVEL:level}: %{GREEDYDATA:message}`}, false},
+		{"specific", &DiscoveredPattern{Source: "library:Nginx Error", Grok: `%{YEAR}/%{MONTHNUM}/%{MONTHDAY} %{TIME:time} \[%{LOGLEVEL:level}\] %{INT:pid}#%{INT:tid}: %{GREEDYDATA:message}`}, true},
+	}
+	for _, tc := range lib {
+		if got := librarySpecific(tc.dp); got != tc.want {
+			t.Errorf("librarySpecific(%s) = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// A contentless structured parse (logfmt/CSV) must not pre-empt a specific
+// curated library pattern for the same lines.
+func TestDiscoverPrefersSpecificLibraryOverContentlessStructured(t *testing.T) {
+	lines := []string{
+		`type=SYSCALL msg=audit(1728600000.001:101): arch=c000003e syscall=59 success=yes exit=0`,
+		`type=SYSCALL msg=audit(1728600000.002:102): arch=c000003e syscall=59 success=yes exit=0`,
+		`type=SYSCALL msg=audit(1728600000.003:103): arch=c000003e syscall=59 success=yes exit=0`,
+	}
+	dp, err := Discover(lines, Options{LibraryThreshold: 0.75})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dp.SourceFamily != "library" {
+		t.Fatalf("source = %q, want a curated library pattern (logfmt must not win)", dp.Source)
+	}
+	if dp.Grok == `%{GREEDYDATA:kvpairs}` {
+		t.Fatal("contentless logfmt blob pre-empted the specific Auditd pattern")
+	}
+}

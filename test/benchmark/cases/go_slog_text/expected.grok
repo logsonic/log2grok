@@ -1,1 +1,1 @@
-%{GREEDYDATA:kvpairs}
+time=%{TIMESTAMP_ISO8601:timestamp} level=%{LOGLEVEL:level} msg=%{QUOTEDSTRING:message}(?: %{GREEDYDATA:kvpairs})?

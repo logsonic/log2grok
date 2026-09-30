@@ -1,1 +1,1 @@
-[^\t]*	[^\t]*	[^\t]*	[^\t]*	[^\t]*
+%{TIMESTAMP_ISO8601:timestamp}\s+%{LOGLEVEL:level}\s+%{NOTSPACE:logger}\s+%{GREEDYDATA:message}

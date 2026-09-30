@@ -1,1 +1,1 @@
-%{GREEDYDATA:kvpairs}
+type=%{WORD:audit_type} msg=audit\(%{NUMBER:audit_epoch}:%{INT:audit_id}\): %{GREEDYDATA:kvpairs}

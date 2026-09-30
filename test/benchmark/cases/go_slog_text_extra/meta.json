@@ -1,6 +1,6 @@
 {
   "case_name": "go_slog_text_extra",
-  "expected_grok": "%{GREEDYDATA:kvpairs}",
-  "expected_source": "structured:logfmt",
+  "expected_grok": "time=%{TIMESTAMP_ISO8601:timestamp} level=%{LOGLEVEL:level} msg=%{QUOTEDSTRING:message}(?: %{GREEDYDATA:kvpairs})?",
+  "expected_source": "library:Go Slog Text",
   "family": "go_slog"
 }

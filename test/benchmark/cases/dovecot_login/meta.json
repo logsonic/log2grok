@@ -1,6 +1,6 @@
 {
   "case_name": "dovecot_login",
-  "expected_grok": "(?:\"(?:\"\"|[^\"])*\"|[^,]*),(?:\"(?:\"\"|[^\"])*\"|[^,]*),(?:\"(?:\"\"|[^\"])*\"|[^,]*),(?:\"(?:\"\"|[^\"])*\"|[^,]*)",
-  "expected_source": "structured:CSV",
+  "expected_grok": "%{SYSLOGTIMESTAMP:timestamp}\\s+%{HOSTNAME:hostname}\\s+%{SYSLOGPROGNAME:program}(?:\\[%{NONNEGINT:pid}\\])?(?: \\(%{DATA:context}\\))?: %{GREEDYDATA:message}",
+  "expected_source": "library:Syslog RFC3164",
   "family": "dovecot"
 }
