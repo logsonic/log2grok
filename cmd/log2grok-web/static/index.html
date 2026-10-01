@@ -4,22 +4,47 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>log2grok — paste logs, get a Grok pattern</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='8'%20fill='%232f6f5e'/%3E%3Ctext%20x='16'%20y='23'%20font-family='monospace'%20font-size='18'%20text-anchor='middle'%20fill='%23ffffff'%3E%7B%7D%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/static/styles.css">
+  <meta name="description" content="Paste a few log lines and log2grok works out the Grok pattern that parses them, with the fields it found and how many lines matched.">
+  <meta name="theme-color" content="#f4f5f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f1217" media="(prefers-color-scheme: dark)">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="log2grok — paste logs, get a Grok pattern">
+  <meta property="og:description" content="Paste a few log lines and get the Grok pattern that parses them, with the fields it found.">
+  <meta name="twitter:card" content="summary">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='8'%20fill='%232a3fc4'/%3E%3Ctext%20x='16'%20y='23'%20font-family='monospace'%20font-size='18'%20text-anchor='middle'%20fill='%23ffffff'%3E%7B%7D%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/styles.css?v={{v}}">
 </head>
 <body>
+  <a class="skip" href="#logs">Skip to the log input</a>
+
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="log2grok home"><span class="brand__mark" aria-hidden="true">%{}</span>log2grok</a>
+    <nav class="topbar__nav" aria-label="Project">
+      <a href="https://github.com/logsonic/log2grok">Source</a>
+    </nav>
+  </header>
+
   <main class="shell">
-    <header class="masthead">
-      <h1>log2grok</h1>
-      <p class="tagline">Paste log lines. Get the Grok pattern that explains them.</p>
-    </header>
+    <section class="hero">
+      <h1>Paste logs. Get the Grok pattern.</h1>
+      <p class="tagline">log2grok reads a few lines of any log, finds the structure they share, and writes the pattern that parses them.</p>
+    </section>
 
     <section class="panel" aria-label="Log input">
-      <label class="field" for="logs">Your logs</label>
+      <div class="panel__head">
+        <label class="field" for="logs">Your logs</label>
+        <div id="examples" class="examples" aria-label="Example inputs">
+          <span class="examples__label">Try an example</span>
+          <button type="button" class="chip" data-example="nginx">nginx access</button>
+          <button type="button" class="chip" data-example="json">JSON app log</button>
+          <button type="button" class="chip" data-example="syslog">syslog</button>
+        </div>
+      </div>
+
       <div class="editor-wrap">
         <div id="logLines" class="editor-lines" aria-hidden="true"></div>
-        <textarea id="logs" class="editor" rows="10" spellcheck="false"
-          placeholder="10.0.0.1 - alice [15/Jan/2025:10:23:45 +0000] &quot;GET /index.html HTTP/1.1&quot; 200 1024"></textarea>
+        <textarea id="logs" class="editor" rows="10" spellcheck="false" autocomplete="off" autocapitalize="off"
+          placeholder="Paste log lines here, one entry per line.&#10;&#10;10.0.0.1 - alice [15/Jan/2025:10:23:45 +0000] &quot;GET /index.html HTTP/1.1&quot; 200 1024"></textarea>
       </div>
 
       <div class="toolbar">
@@ -29,15 +54,8 @@
         </div>
         <div class="toolbar__actions">
           <button id="clear" type="button" class="btn btn--ghost">Clear</button>
-          <button id="discover" type="button" class="btn btn--primary">Discover pattern</button>
+          <button id="discover" type="button" class="btn btn--primary">Discover pattern <kbd class="kbd" aria-hidden="true">Ctrl+Enter</kbd></button>
         </div>
-      </div>
-
-      <div id="examples" class="examples" aria-label="Example inputs">
-        <span class="examples__label">Try:</span>
-        <button type="button" class="chip" data-example="nginx">nginx access</button>
-        <button type="button" class="chip" data-example="json">JSON app log</button>
-        <button type="button" class="chip" data-example="syslog">syslog</button>
       </div>
     </section>
 
@@ -46,18 +64,34 @@
     <section id="result" class="result" role="status" aria-live="polite" hidden>
       <div class="result__head">
         <h2 class="result__title">Pattern</h2>
-        <button id="copy" type="button" class="btn btn--ghost">Copy</button>
+        <button id="copy" type="button" class="btn btn--ghost btn--sm">Copy</button>
       </div>
       <pre id="pattern" class="pattern"><code></code></pre>
-      <div id="badges" class="badges"></div>
-      <div class="coverage">
-        <div class="coverage__bar"><span id="coverageFill" class="coverage__fill"></span></div>
-        <span id="coverageText" class="coverage__text"></span>
+
+      <div class="summary">
+        <div class="coverage">
+          <div class="coverage__bar"><span id="coverageFill" class="coverage__fill"></span></div>
+          <span id="coverageText" class="coverage__text"></span>
+        </div>
+        <div id="badges" class="badges"></div>
       </div>
       <ul id="notes" class="notes"></ul>
+
+      <div id="fields" class="fields" hidden>
+        <h3 class="fields__title">Fields found in the first matching line</h3>
+        <table class="fields__table">
+          <thead><tr><th scope="col">Field</th><th scope="col">Grok type</th><th scope="col">Example value</th></tr></thead>
+          <tbody id="fieldRows"></tbody>
+        </table>
+      </div>
     </section>
   </main>
 
-  <script src="/static/app.js"></script>
+  <footer class="footer">
+    <p id="privacy">Your logs are analyzed in memory and are not stored.</p>
+    <p><a href="https://github.com/logsonic/log2grok">log2grok</a> is open source.</p>
+  </footer>
+
+  <script src="/static/app.js?v={{v}}"></script>
 </body>
 </html>

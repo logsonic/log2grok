@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/logsonic/log2grok/internal/webapi"
 )
 
 const testMaxBody = int64(8 << 20)
@@ -77,8 +79,8 @@ func TestSplitLines(t *testing.T) {
 		{"only newlines", "\n\n", nil},
 	}
 	for _, tc := range cases {
-		if got := splitLines(tc.in); !reflect.DeepEqual(got, tc.want) {
-			t.Errorf("%s: splitLines(%q) = %#v, want %#v", tc.name, tc.in, got, tc.want)
+		if got := webapi.SplitLines(tc.in); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%s: webapi.SplitLines(%q) = %#v, want %#v", tc.name, tc.in, got, tc.want)
 		}
 	}
 }
@@ -325,7 +327,7 @@ func TestDiscoverReportsTokens(t *testing.T) {
 		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("invalid JSON: %v", err)
 		}
-		want := splitLines(nginxSample)
+		want := webapi.SplitLines(nginxSample)
 		if len(resp.Lines) != len(want) {
 			t.Fatalf("len(lines) = %d, want %d", len(resp.Lines), len(want))
 		}

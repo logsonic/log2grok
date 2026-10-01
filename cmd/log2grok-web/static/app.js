@@ -34,7 +34,12 @@ const el = {
   coverageText: document.getElementById("coverageText"),
   notes: document.getElementById("notes"),
   copy: document.getElementById("copy"),
+  fields: document.getElementById("fields"),
+  fieldRows: document.getElementById("fieldRows"),
 };
+
+const GROK_REF = /%\{(\w+)(?::([\w.@-]+)(?::(\w+))?)?\}/g;
+let lastGrok = "";
 
 // Token highlighting uses a transparent backdrop layer aligned under the
 // textarea; each token span gets a background tint. Bounded so a huge paste
@@ -58,7 +63,7 @@ function updateCount() {
 
 function setBusy(busy) {
   el.discover.dataset.busy = busy ? "1" : "0";
-  el.discover.textContent = busy ? "Discovering…" : "Discover pattern";
+  el.discover.firstChild.nodeValue = busy ? "Discovering… " : "Discover pattern ";
   updateCount();
 }
 
@@ -204,10 +209,47 @@ function autosize() {
   el.logLines.scrollTop = el.logs.scrollTop;
 }
 
+// renderPattern paints the Grok pattern with each %{TOKEN:field} tinted the same
+// way the matching text is tinted in the editor.
+function renderPattern(grok) {
+  const frag = document.createDocumentFragment();
+  let pos = 0;
+  for (const m of grok.matchAll(GROK_REF)) {
+    if (m.index > pos) frag.appendChild(document.createTextNode(grok.slice(pos, m.index)));
+    const span = document.createElement("span");
+    span.className = "pt";
+    span.dataset.k = tokenFamily(m[1]);
+    span.textContent = m[0];
+    frag.appendChild(span);
+    pos = m.index + m[0].length;
+  }
+  if (pos < grok.length) frag.appendChild(document.createTextNode(grok.slice(pos)));
+  el.pattern.replaceChildren(frag);
+}
+
+// renderFields lists each named capture of the first matching line with its
+// Grok type and the value it captured.
+function renderFields(lines) {
+  el.fieldRows.replaceChildren();
+  const first = Array.isArray(lines) ? lines.find((l) => l && l.matched) : null;
+  const caps = first ? first.segments.filter((s) => s.token && s.field) : [];
+  el.fields.hidden = caps.length === 0;
+  for (const c of caps) {
+    const tr = document.createElement("tr");
+    for (const text of [c.field, "%{" + c.token + "}", c.text.length > 80 ? c.text.slice(0, 80) + "…" : c.text]) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+    }
+    el.fieldRows.appendChild(tr);
+  }
+}
+
 function render(data) {
   clearFeedback();
   const p = data.pattern;
-  el.pattern.textContent = p.grok;
+  lastGrok = p.grok;
+  renderPattern(p.grok);
   el.result.hidden = false;
 
   el.badges.replaceChildren();
@@ -240,7 +282,117 @@ function render(data) {
   }
 
   serverLines = Array.isArray(data.lines) ? data.lines : null;
+  renderFields(serverLines);
   renderLines();
+  el.result.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "nearest" });
+}
+
+// --- discovery engines ---
+//
+// The page prefers the in-browser engine: the Go engine compiled to WASM,
+// running in a Web Worker, so logs never leave the browser and the page can be
+// hosted as plain static files. If the WASM files are not deployed (as with the
+// bare Go server), it falls back to POST /api/discover.
+
+const MAX_INPUT_BYTES = 8 << 20; // same cap the server enforces
+
+const engine = { worker: null, ready: null, pending: new Map(), seq: 0, usable: true };
+
+function engineVersion() {
+  const src = document.currentScript && document.currentScript.src;
+  return src ? new URL(src).searchParams.get("v") || "" : "";
+}
+const ENGINE_VERSION = engineVersion();
+
+function failPending(message) {
+  for (const { reject } of engine.pending.values()) reject(new Error(message));
+  engine.pending.clear();
+}
+
+function resetEngine() {
+  if (engine.worker) engine.worker.terminate();
+  engine.worker = null;
+  engine.ready = null;
+}
+
+// startEngine boots the worker once and resolves when the WASM is running.
+// A failed boot marks the engine unusable so callers fall back to the server.
+function startEngine() {
+  if (engine.ready) return engine.ready;
+  engine.ready = new Promise((resolve, reject) => {
+    let worker;
+    try {
+      worker = new Worker("/static/worker.js" + (ENGINE_VERSION ? "?v=" + encodeURIComponent(ENGINE_VERSION) : ""));
+    } catch (err) {
+      reject(err);
+      return;
+    }
+    engine.worker = worker;
+    worker.onmessage = (event) => {
+      const m = event.data;
+      if (m.type === "ready") resolve();
+      else if (m.type === "failed") reject(new Error(m.message));
+      else if (m.type === "result" || m.type === "error") {
+        const p = engine.pending.get(m.id);
+        if (!p) return;
+        engine.pending.delete(m.id);
+        if (m.type === "result") {
+          p.resolve(JSON.parse(m.json));
+        } else {
+          // A Go panic leaves the runtime dead; restart the worker next time.
+          resetEngine();
+          p.reject(new Error("The in-browser engine failed. Try again."));
+        }
+      }
+    };
+    worker.onerror = () => {
+      reject(new Error("worker failed"));
+      failPending("The in-browser engine stopped unexpectedly.");
+      if (engine.usable) resetEngine();
+    };
+  });
+  engine.ready.catch(() => {
+    engine.usable = false;
+    resetEngine();
+  });
+  return engine.ready;
+}
+
+function wasmDiscover(logs) {
+  return new Promise((resolve, reject) => {
+    const id = ++engine.seq;
+    engine.pending.set(id, { resolve, reject });
+    engine.worker.postMessage({ id, logs });
+  });
+}
+
+async function serverDiscover(logs) {
+  const res = await fetch("/api/discover", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ logs }),
+  });
+  const data = await res.json().catch(() => null);
+  return { ok: res.ok, data };
+}
+
+// runDiscover is the single seam between the page and the discovery engine.
+// It resolves to {ok, data} where data has the /api/discover response shape.
+async function runDiscover(logs) {
+  if (new Blob([logs]).size > MAX_INPUT_BYTES) {
+    return { ok: false, data: { ok: false, error: { message: "Input is too large; paste at most 8 MiB." } } };
+  }
+  if (engine.usable) {
+    try {
+      await startEngine();
+      const data = await wasmDiscover(logs);
+      document.getElementById("privacy").textContent = "Your logs are analyzed in your browser and never leave this page.";
+      return { ok: data.ok === true, data };
+    } catch (err) {
+      if (engine.usable) throw err; // engine is fine; this request failed
+    }
+  }
+  return serverDiscover(logs);
 }
 
 async function discover() {
@@ -252,19 +404,14 @@ async function discover() {
   setBusy(true);
   clearFeedback();
   try {
-    const res = await fetch("/api/discover", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ logs: el.logs.value }),
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok || !data || data.ok !== true) {
+    const { ok, data } = await runDiscover(el.logs.value);
+    if (!ok || !data || data.ok !== true) {
       showError((data && data.error && data.error.message) || "Discovery failed. Please try again.");
       return;
     }
     render(data);
   } catch (err) {
-    showError("Could not reach the server. Is it still running?");
+    showError("Discovery failed. " + (err && err.message ? err.message : "Please try again."));
   } finally {
     setBusy(false);
   }
@@ -276,6 +423,7 @@ el.clear.addEventListener("click", () => {
   serverLines = null;
   clearFeedback();
   el.result.hidden = true;
+  lastGrok = "";
   renderLines();
   autosize();
   updateCount();
@@ -308,7 +456,7 @@ el.examples.addEventListener("click", (event) => {
 });
 el.copy.addEventListener("click", async () => {
   try {
-    await navigator.clipboard.writeText(el.pattern.textContent);
+    await navigator.clipboard.writeText(lastGrok);
     el.copy.textContent = "Copied";
   } catch (err) {
     el.copy.textContent = "Select & copy";
@@ -328,3 +476,4 @@ window.addEventListener("resize", () => {
 renderLines();
 autosize();
 updateCount();
+startEngine().catch(() => {}); // warm up the engine; failures fall back to the server

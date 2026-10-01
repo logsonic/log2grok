@@ -29,8 +29,12 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           newMux(maxBodyBytes),
+		Handler:           newHandler(maxBodyBytes),
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      90 * time.Second, // discovery on a multi-MiB paste can take seconds
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    16 << 10,
 	}
 
 	go func() {

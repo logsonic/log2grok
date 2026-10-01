@@ -7,3 +7,4 @@ bin/**
 *.test
 *.prof
 *.out
+dist/
