@@ -1,4 +1,4 @@
-.PHONY: buildpacks build test golden lint run bench web web-run
+.PHONY: buildpacks build test golden lint run bench web web-run site
 
 buildpacks:
 	go run ./cmd/buildpacks
@@ -27,3 +27,7 @@ web:
 
 web-run:
 	go run ./cmd/log2grok-web
+
+# Standalone static site (WASM engine in the browser) -> dist/. See docs/wasm-engine.md.
+site:
+	./scripts/build-site.sh

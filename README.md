@@ -37,6 +37,10 @@ Paste log lines and press **Discover pattern** to see the Grok pattern, its
 source, and its coverage. Flags: `-addr` (default `127.0.0.1:8080`) and
 `-config-dir` (externalized pattern library; empty uses the embedded default).
 
+The page runs the engine in the browser as WebAssembly when the WASM files are
+present. `make site` builds a standalone, server-free copy into `dist/` for
+static hosting such as Cloudflare Pages; see [`docs/wasm-engine.md`](docs/wasm-engine.md).
+
 ## Use as a Go library
 
 The public API lives under `github.com/logsonic/log2grok/pkg/log2grok`. Pass the
