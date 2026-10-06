@@ -552,6 +552,9 @@ var logfmtProbe = structuredProbe{
 	Name:   "logfmt",
 	Likely: looksLikeLogfmt,
 	Render: func(sample []string) (string, string, bool) {
+		if grok, ok := renderLogfmtKeyed(sample); ok {
+			return grok, "structured:logfmt", true
+		}
 		return `%{GREEDYDATA:kvpairs}`, "structured:logfmt", true
 	},
 }
