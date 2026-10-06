@@ -354,22 +354,48 @@ func TestStructuredAndLibrarySpecificity(t *testing.T) {
 	}
 }
 
-// A contentless structured parse (logfmt/CSV) must not pre-empt a specific
-// curated library pattern for the same lines.
-func TestDiscoverPrefersSpecificLibraryOverContentlessStructured(t *testing.T) {
-	lines := []string{
-		`type=SYSCALL msg=audit(1728600000.001:101): arch=c000003e syscall=59 success=yes exit=0`,
-		`type=SYSCALL msg=audit(1728600000.002:102): arch=c000003e syscall=59 success=yes exit=0`,
-		`type=SYSCALL msg=audit(1728600000.003:103): arch=c000003e syscall=59 success=yes exit=0`,
+// Typed keyed logfmt keeps structured-stage priority, while a contentless
+// logfmt fallback yields to a specific curated library pattern.
+func TestDiscoverLogfmtAndLibraryPriority(t *testing.T) {
+	cases := []struct {
+		name       string
+		secondLine string
+		wantKeyed  bool
+		wantSource string
+	}{
+		{
+			name:       "typed keyed logfmt",
+			secondLine: `type=SYSCALL msg=audit(1728600000.002:102): arch=c000003e syscall=59 success=yes exit=0`,
+			wantKeyed:  true,
+			wantSource: "structured:logfmt",
+		},
+		{
+			name:       "contentless logfmt with reordered keys",
+			secondLine: `type=SYSCALL msg=audit(1728600000.002:102): syscall=59 arch=c000003e success=yes exit=0`,
+			wantKeyed:  false,
+			wantSource: "library:Auditd Key Value",
+		},
 	}
-	dp, err := Discover(lines, Options{LibraryThreshold: 0.75})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if dp.SourceFamily != "library" {
-		t.Fatalf("source = %q, want a curated library pattern (logfmt must not win)", dp.Source)
-	}
-	if dp.Grok == `%{GREEDYDATA:kvpairs}` {
-		t.Fatal("contentless logfmt blob pre-empted the specific Auditd pattern")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			lines := []string{
+				`type=SYSCALL msg=audit(1728600000.001:101): arch=c000003e syscall=59 success=yes exit=0`,
+				tc.secondLine,
+				`type=SYSCALL msg=audit(1728600000.003:103): arch=c000003e syscall=59 success=yes exit=0`,
+			}
+			if _, ok := renderLogfmtKeyed(lines); ok != tc.wantKeyed {
+				t.Fatalf("keyed rendering = %v, want %v", ok, tc.wantKeyed)
+			}
+			dp, err := Discover(lines, Options{LibraryThreshold: 0.75})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if dp.Source != tc.wantSource {
+				t.Fatalf("source = %q, want %q", dp.Source, tc.wantSource)
+			}
+			if dp.Grok == `%{GREEDYDATA:kvpairs}` {
+				t.Fatal("contentless logfmt blob pre-empted a typed pattern")
+			}
+		})
 	}
 }
