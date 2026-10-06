@@ -1,1 +1,1 @@
-%{GREEDYDATA:kvpairs}
+type=%{WORD:type} msg=%{NOTSPACE:message} pid=%{INT:pid} uid=%{INT:uid} auid=%{INT:auid} ses=%{INT:ses} msg='%{DATA:message_2}'

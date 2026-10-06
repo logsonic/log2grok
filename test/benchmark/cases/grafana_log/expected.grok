@@ -1,1 +1,1 @@
-%{GREEDYDATA:kvpairs}
+t=%{TIMESTAMP_ISO8601:t} lvl=%{LOGLEVEL:level} msg=%{QUOTEDSTRING:message} logger=%{WORD:logger} userId=%{INT:userid} orgId=%{INT:orgid} uname=%{WORD:uname} method=%{WORD:method} path=%{URIPATHPARAM:path} status=%{INT:status} remote_addr=%{IPV4:remote_addr} time_ms=%{INT:time_ms}
