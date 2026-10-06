@@ -1,1 +1,1 @@
-%{GREEDYDATA:kvpairs}
+ts=%{TIMESTAMP_ISO8601:timestamp} caller=%{NOTSPACE:caller} level=%{LOGLEVEL:level} msg=%{QUOTEDSTRING:message} version=%{QUOTEDSTRING:version}

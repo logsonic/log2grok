@@ -192,9 +192,17 @@ var tileSingleSpecs = []tileSingleSpec{
 	{"URIPATHPARAM", "path", true},
 	{"INT", "n", true},
 	{"NUMBER", "n", true},
+	{"BASE16NUM", "hex", false},
 	{"REDISLEVEL", "level", true},
 	{"WORD", "word", false},
 	{"NOTSPACE", "value", false},
+}
+
+// tileClassifyOverride narrows a primitive's classifier. The override must
+// match a subset of the primitive, so the emitted %{TYPE} still matches.
+// BASE16NUM alone would claim words like "add" or "cafe".
+var tileClassifyOverride = map[string]string{
+	"BASE16NUM": `^(?:0[xX][0-9A-Fa-f]+|[0-9A-Fa-f]{8,})$`,
 }
 
 var (
@@ -215,6 +223,9 @@ func loadTileSingles() ([]tilePrimitive, *tilePrimitive, *tilePrimitive) {
 		re, err := CompileGrok("%{"+spec.GrokName+"}", nil)
 		if err != nil {
 			continue
+		}
+		if expr, ok := tileClassifyOverride[spec.GrokName]; ok {
+			re = regexp.MustCompile(expr)
 		}
 		singles = append(singles, tilePrimitive{
 			GrokName: spec.GrokName,

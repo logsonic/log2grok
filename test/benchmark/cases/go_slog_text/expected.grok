@@ -1,1 +1,1 @@
-%{GREEDYDATA:kvpairs}
+time=%{TIMESTAMP_ISO8601:timestamp} level=%{LOGLEVEL:level} msg=%{QUOTEDSTRING:message} method=%{WORD:method} path=%{URIPATHPARAM:path} status=%{INT:status} duration=%{DURATION:duration}

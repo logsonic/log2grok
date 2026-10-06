@@ -1,1 +1,1 @@
-%{GREEDYDATA:kvpairs}
+ts=%{TIMESTAMP_ISO8601:timestamp} level=%{LOGLEVEL:level} service=%{WORD:service} trace_id=%{BASE16NUM:trace_id} span_id=%{BASE16NUM:span_id} msg=%{QUOTEDSTRING:message} duration=%{DURATION:duration} status=%{INT:status}
