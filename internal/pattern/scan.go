@@ -7,17 +7,28 @@ import (
 	"sync/atomic"
 )
 
-// scanChunkLines is the work-queue chunk size for parallel scans. Workers
+// scanChunkLines is the largest work-queue chunk for parallel scans. Workers
 // claim chunks via an atomic counter, so slow chunks (backtracking
 // GREEDYDATA tails) don't strand one worker while others idle: worst-case
 // imbalance is bounded by one chunk.
 const scanChunkLines = 1024
 
+// scanMinChunkLines is the smallest chunk: even a cheap regexp spends tens of
+// microseconds on 32 lines, well above the cost of claiming a chunk.
+const scanMinChunkLines = 32
+
+// scanChunkSize picks the chunk for an n-line parallel scan: about four
+// chunks per worker so small inputs (a few hundred lines) still spread
+// across every core, capped at scanChunkLines for large inputs.
+func scanChunkSize(n, procs int) int {
+	return min(max((n+4*procs-1)/(4*procs), scanMinChunkLines), scanChunkLines)
+}
+
 // parallelScanMinLines is the input size below which scans run sequentially:
-// goroutine spawn overhead (~2µs each, ×GOMAXPROCS) exceeds the scan cost for
-// small inputs, and the per-case benchmark inputs (tens–hundreds of lines)
-// must not regress. Var, not const, so tests can force the parallel path.
-var parallelScanMinLines = 4096
+// under ~100 lines a scan is cheaper than starting the workers. Callers such
+// as logsonic send previews of a few hundred to a thousand lines, which must
+// take the parallel path. Var, not const, so tests can force either path.
+var parallelScanMinLines = 100
 
 // scanAbortHook, if non-nil, is called once per scan that exits early because
 // its scanCtl was aborted. Test-only instrumentation: production code never
@@ -70,7 +81,7 @@ func scanMatchesInto(re *regexp.Regexp, lines []string, bitmap []bool, ctl *scan
 		return scanMatchesSeq(re, lines, bitmap, ctl)
 	}
 
-	chunk := scanChunkLines
+	chunk := scanChunkSize(n, procs)
 	workers := procs
 	if w := (n + chunk - 1) / chunk; w < workers {
 		workers = w
@@ -150,9 +161,10 @@ func scanMatchesFloor(re *regexp.Regexp, lines []string, floor int, ctl *scanCtl
 		return evaluateCoverageWithFloorSeq(re, lines, floor, ctl)
 	}
 
-	chunk := scanChunkLines
+	procs := runtime.GOMAXPROCS(0)
+	chunk := scanChunkSize(n, procs)
 	chunks := (n + chunk - 1) / chunk
-	workers := min(runtime.GOMAXPROCS(0), chunks)
+	workers := min(procs, chunks)
 	chunkMiss := make([]int, chunks)
 	var next, misses atomic.Int64
 	var stop, hitCtlFlag atomic.Bool
