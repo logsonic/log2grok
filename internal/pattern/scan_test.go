@@ -233,3 +233,47 @@ func TestEvaluateCoverageWithFloorTieMatchesSequentialDecision(t *testing.T) {
 		t.Fatalf("tie value diverges: sequential=%d parallel=%d, floor=%d", seqMatched, parMatched, floor)
 	}
 }
+
+// The parallel floor scan must return exactly the sequential prune's value
+// for every floor, whatever the position of the misses, so library ranking
+// and relaxTail cut choice never depend on GOMAXPROCS.
+func TestScanMatchesFloorEqualsSequential(t *testing.T) {
+	if runtime.GOMAXPROCS(0) < 2 {
+		t.Skip("single-core machine; parallel path unreachable")
+	}
+	old := parallelScanMinLines
+	parallelScanMinLines = 0
+	defer func() { parallelScanMinLines = old }()
+
+	re := regexp.MustCompile(`\d+`)
+	n := 5*scanChunkLines + 123
+	tailHits := make([]string, n) // matches only at the end
+	headHits := make([]string, n) // matches only at the start
+	for i := range tailHits {
+		tailHits[i], headHits[i] = "no", "no"
+		if i >= n-300 {
+			tailHits[i] = "42"
+		}
+		if i < 300 {
+			headHits[i] = "42"
+		}
+	}
+	inputs := map[string][]string{
+		"random":   deterministicLines(n),
+		"tailHits": tailHits,
+		"headHits": headHits,
+	}
+	for name, lines := range inputs {
+		exact := scanMatchesSeq(re, lines, nil, nil)
+		floors := []int{0, 1, exact - 1, exact, exact + 1, n - 1, n, n + 5, n / 2, scanChunkLines}
+		for _, floor := range floors {
+			if floor < 0 {
+				continue
+			}
+			want := evaluateCoverageWithFloorSeq(re, lines, floor, nil)
+			if got := evaluateCoverageWithFloor(re, lines, floor); got != want {
+				t.Errorf("%s floor=%d: parallel=%d sequential=%d (exact %d)", name, floor, got, want, exact)
+			}
+		}
+	}
+}

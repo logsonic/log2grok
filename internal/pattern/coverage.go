@@ -25,9 +25,9 @@ func EvaluateCoverage(re *regexp.Regexp, lines []string) int {
 // candidate, changing which library pattern wins (and making the result
 // GOMAXPROCS-dependent). See TestEvaluateCoverageWithFloorTieMatchesSequentialDecision.
 //
-// Contract: the returned value is the exact count when the candidate can
-// strictly beat `floor` (or when `floor < 0`); otherwise it is <= `floor` and
-// is decision-equivalent to the sequential prune.
+// Contract: the returned value is identical to the sequential pruned scan's
+// at any GOMAXPROCS — the exact count when the candidate can strictly beat
+// `floor` (or when `floor < 0`), otherwise the sequential early partial.
 func evaluateCoverageWithFloor(re *regexp.Regexp, lines []string, floor int) int {
 	return evaluateCoverageWithFloorCtl(re, lines, floor, nil)
 }
@@ -48,17 +48,11 @@ func evaluateCoverageWithFloorCtl(re *regexp.Regexp, lines []string, floor int, 
 	if re == nil {
 		return 0
 	}
-	if runtime.GOMAXPROCS(0) >= 2 && len(lines) >= parallelScanMinLines {
-		exact := scanMatches(re, lines, ctl)
-		// exact == floor is the only value where exact and pruned diverge in a
-		// way callers observe: an exact tie reaches betterCandidate's
-		// tie-break, whereas the sequential prune returns a partial <= floor
-		// and is rejected on the count comparison alone. Reproduce the prune
-		// for that one candidate so the decision is identical to sequential.
-		if floor >= 0 && exact == floor {
-			return evaluateCoverageWithFloorSeq(re, lines, floor, ctl)
-		}
-		return exact
+	if floor >= 0 && runtime.GOMAXPROCS(0) >= 2 && len(lines) >= parallelScanMinLines {
+		return scanMatchesFloor(re, lines, floor, ctl)
+	}
+	if floor < 0 {
+		return scanMatches(re, lines, ctl)
 	}
 	return evaluateCoverageWithFloorSeq(re, lines, floor, ctl)
 }
