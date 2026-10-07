@@ -136,8 +136,8 @@ func scoreLibraryOnSample(sample []string) []candidateResult {
 // scoreOne scores one compiled pattern against the sample. The caller
 // parallelizes across patterns, so this stays sequential (scanMatchesSeq):
 // nesting EvaluateCoverage's own parallel scan inside would oversubscribe
-// (sample is exactly parallelScanMinLines, so EvaluateCoverage would fan out
-// GOMAXPROCS workers per pattern).
+// (the sample is far above parallelScanMinLines, so EvaluateCoverage would fan
+// out GOMAXPROCS workers per pattern).
 func scoreOne(cp compiledPattern, sample []string) candidateResult {
 	matched := scanMatchesSeq(cp.Regex, sample, nil, nil)
 	return candidateResult{

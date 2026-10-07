@@ -246,34 +246,51 @@ func TestScanMatchesFloorEqualsSequential(t *testing.T) {
 	defer func() { parallelScanMinLines = old }()
 
 	re := regexp.MustCompile(`\d+`)
-	n := 5*scanChunkLines + 123
-	tailHits := make([]string, n) // matches only at the end
-	headHits := make([]string, n) // matches only at the start
-	for i := range tailHits {
-		tailHits[i], headHits[i] = "no", "no"
-		if i >= n-300 {
-			tailHits[i] = "42"
+	for _, n := range []int{150, 1000, 5*scanChunkLines + 123} {
+		hits := min(300, n/3)
+		tailHits := make([]string, n) // matches only at the end
+		headHits := make([]string, n) // matches only at the start
+		for i := range tailHits {
+			tailHits[i], headHits[i] = "no", "no"
+			if i >= n-hits {
+				tailHits[i] = "42"
+			}
+			if i < hits {
+				headHits[i] = "42"
+			}
 		}
-		if i < 300 {
-			headHits[i] = "42"
+		inputs := map[string][]string{
+			"random":   deterministicLines(n),
+			"tailHits": tailHits,
+			"headHits": headHits,
+		}
+		for name, lines := range inputs {
+			exact := scanMatchesSeq(re, lines, nil, nil)
+			floors := []int{0, 1, exact - 1, exact, exact + 1, n - 1, n, n + 5, n / 2, scanMinChunkLines}
+			for _, floor := range floors {
+				if floor < 0 {
+					continue
+				}
+				want := evaluateCoverageWithFloorSeq(re, lines, floor, nil)
+				if got := evaluateCoverageWithFloor(re, lines, floor); got != want {
+					t.Errorf("n=%d %s floor=%d: parallel=%d sequential=%d (exact %d)", n, name, floor, got, want, exact)
+				}
+			}
 		}
 	}
-	inputs := map[string][]string{
-		"random":   deterministicLines(n),
-		"tailHits": tailHits,
-		"headHits": headHits,
+}
+
+func TestScanChunkSize(t *testing.T) {
+	cases := []struct{ n, procs, want int }{
+		{100, 18, scanMinChunkLines},  // tiny input: floor applies
+		{1000, 4, 63},                 // ~4 chunks per worker
+		{1000, 18, scanMinChunkLines}, // 18 workers each get ~2 chunks
+		{50000, 18, 695},
+		{1000000, 18, scanChunkLines}, // capped
 	}
-	for name, lines := range inputs {
-		exact := scanMatchesSeq(re, lines, nil, nil)
-		floors := []int{0, 1, exact - 1, exact, exact + 1, n - 1, n, n + 5, n / 2, scanChunkLines}
-		for _, floor := range floors {
-			if floor < 0 {
-				continue
-			}
-			want := evaluateCoverageWithFloorSeq(re, lines, floor, nil)
-			if got := evaluateCoverageWithFloor(re, lines, floor); got != want {
-				t.Errorf("%s floor=%d: parallel=%d sequential=%d (exact %d)", name, floor, got, want, exact)
-			}
+	for _, c := range cases {
+		if got := scanChunkSize(c.n, c.procs); got != c.want {
+			t.Errorf("scanChunkSize(%d, %d) = %d, want %d", c.n, c.procs, got, c.want)
 		}
 	}
 }
