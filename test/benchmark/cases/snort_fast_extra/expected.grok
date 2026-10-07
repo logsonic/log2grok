@@ -1,0 +1,1 @@
+%{NOTSPACE:timestamp} \[\*\*\] \[%{DATA:sid}\] %{DATA:msg} \[\*\*\] \[Classification: %{DATA:classification}\] \[Priority: %{INT:priority}\] \{%{WORD:protocol}\} %{IP:src_ip}(?::%{INT:src_port})? -> %{IP:dst_ip}(?::%{INT:dst_port})?

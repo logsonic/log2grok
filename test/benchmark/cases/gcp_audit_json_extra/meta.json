@@ -1,0 +1,6 @@
+{
+  "case_name": "gcp_audit_json_extra",
+  "expected_grok": "\\{\\s*\"protoPayload\"\\s*:\\s*%{DATA:protopayload}\\s*,\\s*\"resource\"\\s*:\\s*%{DATA:resource}\\s*,\\s*\"timestamp\"\\s*:\\s*%{QUOTEDSTRING:timestamp}\\s*,\\s*\"severity\"\\s*:\\s*%{QUOTEDSTRING:level}\\s*\\}",
+  "expected_source": "structured:JSON Object",
+  "family": "gcp_audit_json"
+}

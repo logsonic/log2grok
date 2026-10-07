@@ -1,0 +1,1 @@
+\{\s*"ClientAddr"\s*:\s*%{QUOTEDSTRING:clientaddr}\s*,\s*"RequestMethod"\s*:\s*%{QUOTEDSTRING:requestmethod}\s*,\s*"RequestPath"\s*:\s*%{QUOTEDSTRING:requestpath}\s*,\s*"DownstreamStatus"\s*:\s*%{NUMBER:downstreamstatus}\s*,\s*"Duration"\s*:\s*%{NUMBER:duration}\s*,\s*"OriginStatus"\s*:\s*%{NUMBER:originstatus}\s*\}

@@ -1,0 +1,6 @@
+{
+  "case_name": "datadog_json_extra",
+  "expected_grok": "\\{\\s*\"timestamp\"\\s*:\\s*%{QUOTEDSTRING:timestamp}\\s*,\\s*\"status\"\\s*:\\s*%{QUOTEDSTRING:status}\\s*,\\s*\"service\"\\s*:\\s*%{QUOTEDSTRING:service}\\s*,\\s*\"message\"\\s*:\\s*%{QUOTEDSTRING:message}\\s*,\\s*\"dd\"\\s*:\\s*%{DATA:dd}\\s*\\}",
+  "expected_source": "structured:JSON Object",
+  "family": "datadog_json"
+}

@@ -1,0 +1,15 @@
+2024-10-10T13:00:00.000Z ##[group]Run npm test -- --shard=0
+2024-10-10T13:00:01.001Z ##[group]Run npm test -- --shard=1
+2024-10-10T13:00:02.002Z ##[group]Run npm test -- --shard=2
+2024-10-10T13:00:03.003Z ##[group]Run npm test -- --shard=3
+2024-10-10T13:00:04.004Z ##[group]Run npm test -- --shard=4
+2024-10-10T13:00:05.005Z ##[group]Run npm test -- --shard=5
+2024-10-10T13:00:06.006Z ##[group]Run npm test -- --shard=6
+2024-10-10T13:00:07.007Z ##[group]Run npm test -- --shard=7
+2024-10-10T13:00:08.008Z ##[group]Run npm test -- --shard=8
+2024-10-10T13:00:09.009Z ##[group]Run npm test -- --shard=9
+2024-10-10T13:00:10.010Z ##[group]Run npm test -- --shard=10
+2024-10-10T13:00:11.011Z ##[group]Run npm test -- --shard=11
+2024-10-10T13:00:12.012Z ##[group]Run npm test -- --shard=12
+2024-10-10T13:00:13.013Z ##[group]Run npm test -- --shard=13
+2024-10-10T13:00:14.014Z ##[group]Run npm test -- --shard=14

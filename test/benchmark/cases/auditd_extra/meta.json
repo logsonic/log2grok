@@ -1,0 +1,6 @@
+{
+  "case_name": "auditd_extra",
+  "expected_grok": "type=%{WORD:type} msg=%{NOTSPACE:message} arch=%{BASE16NUM:arch} syscall=%{INT:syscall} success=%{WORD:success} exit=%{INT:exit} a0=%{WORD:a0} uid=%{INT:uid} gid=%{INT:gid} euid=%{INT:euid} comm=%{QUOTEDSTRING:comm}",
+  "expected_source": "structured:logfmt",
+  "family": "auditd"
+}

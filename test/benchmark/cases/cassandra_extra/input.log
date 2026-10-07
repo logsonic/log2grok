@@ -1,0 +1,15 @@
+INFO  [CompactionExecutor:0] 2024-10-10 13:00:00,000 CompactionTask.java:400 - Compacted 4 sstables to
+INFO  [CompactionExecutor:1] 2024-10-10 13:00:01,001 CompactionTask.java:401 - Compacted 4 sstables to
+INFO  [CompactionExecutor:2] 2024-10-10 13:00:02,002 CompactionTask.java:402 - Compacted 4 sstables to
+INFO  [CompactionExecutor:3] 2024-10-10 13:00:03,003 CompactionTask.java:403 - Compacted 4 sstables to
+INFO  [CompactionExecutor:4] 2024-10-10 13:00:04,004 CompactionTask.java:404 - Compacted 4 sstables to
+INFO  [CompactionExecutor:5] 2024-10-10 13:00:05,005 CompactionTask.java:405 - Compacted 4 sstables to
+INFO  [CompactionExecutor:6] 2024-10-10 13:00:06,006 CompactionTask.java:406 - Compacted 4 sstables to
+INFO  [CompactionExecutor:7] 2024-10-10 13:00:07,007 CompactionTask.java:407 - Compacted 4 sstables to
+INFO  [CompactionExecutor:8] 2024-10-10 13:00:08,008 CompactionTask.java:408 - Compacted 4 sstables to
+INFO  [CompactionExecutor:9] 2024-10-10 13:00:09,009 CompactionTask.java:409 - Compacted 4 sstables to
+INFO  [CompactionExecutor:10] 2024-10-10 13:00:10,010 CompactionTask.java:410 - Compacted 4 sstables to
+INFO  [CompactionExecutor:11] 2024-10-10 13:00:11,011 CompactionTask.java:411 - Compacted 4 sstables to
+INFO  [CompactionExecutor:12] 2024-10-10 13:00:12,012 CompactionTask.java:412 - Compacted 4 sstables to
+INFO  [CompactionExecutor:13] 2024-10-10 13:00:13,013 CompactionTask.java:413 - Compacted 4 sstables to
+INFO  [CompactionExecutor:14] 2024-10-10 13:00:14,014 CompactionTask.java:414 - Compacted 4 sstables to

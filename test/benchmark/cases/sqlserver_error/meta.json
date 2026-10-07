@@ -1,0 +1,6 @@
+{
+  "case_name": "sqlserver_error",
+  "expected_grok": "\\[?%{TIMESTAMP_ISO8601:timestamp}\\]?\\s+%{GREEDYDATA:message}",
+  "expected_source": "library:Generic Bracketed Timestamp",
+  "family": "sqlserver"
+}

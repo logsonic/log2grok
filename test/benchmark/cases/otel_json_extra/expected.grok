@@ -1,0 +1,1 @@
+\{\s*"ts"\s*:\s*%{QUOTEDSTRING:timestamp}\s*,\s*"level"\s*:\s*%{QUOTEDSTRING:level}\s*,\s*"msg"\s*:\s*%{QUOTEDSTRING:message}\s*,\s*"trace_id"\s*:\s*%{QUOTEDSTRING:trace_id}\s*,\s*"span_id"\s*:\s*%{QUOTEDSTRING:span_id}\s*,\s*"service\.name"\s*:\s*%{QUOTEDSTRING:service_name}\s*,\s*"http\.status_code"\s*:\s*%{NUMBER:http_status_code}\s*\}

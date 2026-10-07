@@ -1,0 +1,15 @@
+2024-10-10 13:00:00,000 INFO [main] org.apache.hadoop.mapreduce.Job: Processing split 0
+2024-10-10 13:00:01,001 INFO [main] org.apache.hadoop.mapreduce.Job: Processing split 1
+2024-10-10 13:00:02,002 INFO [main] org.apache.hadoop.mapreduce.Job: Processing split 2
+2024-10-10 13:00:03,003 INFO [main] org.apache.hadoop.mapreduce.Job: Processing split 3
+2024-10-10 13:00:04,004 INFO [main] org.apache.hadoop.mapreduce.Job: Processing split 4
+2024-10-10 13:00:05,005 INFO [main] org.apache.hadoop.mapreduce.Job: Processing split 5
+2024-10-10 13:00:06,006 INFO [main] org.apache.hadoop.mapreduce.Job: Processing split 6
+2024-10-10 13:00:07,007 INFO [main] org.apache.hadoop.mapreduce.Job: Processing split 7
+2024-10-10 13:00:08,008 INFO [main] org.apache.hadoop.mapreduce.Job: Processing split 8
+2024-10-10 13:00:09,009 INFO [main] org.apache.hadoop.mapreduce.Job: Processing split 9
+2024-10-10 13:00:10,010 INFO [main] org.apache.hadoop.mapreduce.Job: Processing split 10
+2024-10-10 13:00:11,011 INFO [main] org.apache.hadoop.mapreduce.Job: Processing split 11
+2024-10-10 13:00:12,012 INFO [main] org.apache.hadoop.mapreduce.Job: Processing split 12
+2024-10-10 13:00:13,013 INFO [main] org.apache.hadoop.mapreduce.Job: Processing split 13
+2024-10-10 13:00:14,014 INFO [main] org.apache.hadoop.mapreduce.Job: Processing split 14

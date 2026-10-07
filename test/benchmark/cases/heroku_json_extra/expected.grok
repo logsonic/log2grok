@@ -1,0 +1,1 @@
+\{\s*"log"\s*:\s*%{QUOTEDSTRING:message}\s*,\s*"stream"\s*:\s*%{QUOTEDSTRING:stream}\s*,\s*"time"\s*:\s*%{QUOTEDSTRING:timestamp}\s*\}

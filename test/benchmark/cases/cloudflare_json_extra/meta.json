@@ -1,0 +1,6 @@
+{
+  "case_name": "cloudflare_json_extra",
+  "expected_grok": "\\{\\s*\"EdgeStartTimestamp\"\\s*:\\s*%{QUOTEDSTRING:edgestarttimestamp}\\s*,\\s*\"ClientIP\"\\s*:\\s*%{QUOTEDSTRING:clientip}\\s*,\\s*\"ClientRequestMethod\"\\s*:\\s*%{QUOTEDSTRING:clientrequestmethod}\\s*,\\s*\"ClientRequestURI\"\\s*:\\s*%{QUOTEDSTRING:clientrequesturi}\\s*,\\s*\"EdgeResponseStatus\"\\s*:\\s*%{NUMBER:edgeresponsestatus}\\s*,\\s*\"OriginResponseStatus\"\\s*:\\s*%{NUMBER:originresponsestatus}\\s*\\}",
+  "expected_source": "structured:JSON Object",
+  "family": "cloudflare_json"
+}

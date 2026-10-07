@@ -1,0 +1,1 @@
+\{\s*"timestamp"\s*:\s*%{QUOTEDSTRING:timestamp}\s*,\s*"event_type"\s*:\s*%{QUOTEDSTRING:event_type}\s*,\s*"src_ip"\s*:\s*%{QUOTEDSTRING:client_ip}\s*,\s*"dest_ip"\s*:\s*%{QUOTEDSTRING:dest_ip}\s*,\s*"proto"\s*:\s*%{QUOTEDSTRING:proto}\s*,\s*"alert"\s*:\s*%{DATA:alert}\s*\}

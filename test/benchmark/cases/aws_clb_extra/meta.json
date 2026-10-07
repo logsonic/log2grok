@@ -1,0 +1,6 @@
+{
+  "case_name": "aws_clb_extra",
+  "expected_grok": "%{TIMESTAMP_ISO8601:timestamp} %{NOTSPACE:elb_name} %{IP:client_ip}:%{INT:client_port} (?:%{IP:backend_ip}:%{INT:backend_port}|-) %{NUMBER:request_processing_time} %{NUMBER:backend_processing_time} %{NUMBER:response_processing_time} %{INT:elb_status_code} (?:%{INT:backend_status_code}|-) %{INT:received_bytes} %{INT:sent_bytes} \"%{WORD:method} %{NOTSPACE:url} HTTP/%{NUMBER:http_version}\"",
+  "expected_source": "library:AWS CLB",
+  "family": "aws_clb"
+}

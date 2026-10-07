@@ -1,0 +1,1 @@
+%{TIMESTAMP_ISO8601:timestamp} %{LOGLEVEL:level} \[%{DATA:thread}\] %{JAVACLASS:logger}: %{GREEDYDATA:message}

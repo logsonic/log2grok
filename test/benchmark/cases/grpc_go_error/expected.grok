@@ -1,0 +1,1 @@
+%{YEAR:year}/%{MONTHNUM2:month}/%{MONTHDAY2:monthday} %{TIME:time} grpc: addrConn\.createTransport failed to connect to \{addr: "%{IPV4:ip}:%{INT:n}"\}

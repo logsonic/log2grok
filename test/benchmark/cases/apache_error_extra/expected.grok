@@ -1,0 +1,1 @@
+\[%{APACHE_ERROR_TIME:timestamp}\] \[%{DATA:module}:%{LOGLEVEL:level}\](?: \[pid %{INT:pid}(?::tid %{INT:tid})?\])?(?: \[client %{IPORHOST:client_ip}:%{INT:client_port}\])? %{GREEDYDATA:message}

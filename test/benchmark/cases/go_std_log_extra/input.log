@@ -1,0 +1,15 @@
+2024/10/10 13:00:00 server.go:100: starting worker 0 on port 8000
+2024/10/10 13:00:01 server.go:101: starting worker 1 on port 8001
+2024/10/10 13:00:02 server.go:102: starting worker 2 on port 8002
+2024/10/10 13:00:03 server.go:103: starting worker 3 on port 8003
+2024/10/10 13:00:04 server.go:104: starting worker 4 on port 8004
+2024/10/10 13:00:05 server.go:105: starting worker 5 on port 8005
+2024/10/10 13:00:06 server.go:106: starting worker 6 on port 8006
+2024/10/10 13:00:07 server.go:107: starting worker 7 on port 8007
+2024/10/10 13:00:08 server.go:108: starting worker 8 on port 8008
+2024/10/10 13:00:09 server.go:109: starting worker 9 on port 8009
+2024/10/10 13:00:10 server.go:110: starting worker 10 on port 8010
+2024/10/10 13:00:11 server.go:111: starting worker 11 on port 8011
+2024/10/10 13:00:12 server.go:112: starting worker 12 on port 8012
+2024/10/10 13:00:13 server.go:113: starting worker 13 on port 8013
+2024/10/10 13:00:14 server.go:114: starting worker 14 on port 8014

@@ -1,0 +1,1 @@
+\[%{NUMBER:n}\] usb %{NOTSPACE:value} new high-speed USB device number %{INT:n_2} using xhci_hcd

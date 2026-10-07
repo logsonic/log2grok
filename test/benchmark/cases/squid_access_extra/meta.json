@@ -1,0 +1,6 @@
+{
+  "case_name": "squid_access_extra",
+  "expected_grok": "%{NUMBER:timestamp}\\s+%{INT:duration} %{IP:client_ip} %{WORD:cache_result}/%{INT:status} %{INT:bytes} %{WORD:method} %{NOTSPACE:url} %{NOTSPACE:user} %{NOTSPACE:hierarchy}/%{IPORHOST:server} %{NOTSPACE:content_type}",
+  "expected_source": "library:Squid Access",
+  "family": "squid_access"
+}

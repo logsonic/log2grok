@@ -36,10 +36,14 @@ func currentPatternStateVersion() uint64 {
 	return patternStateVersion
 }
 
-func knownPatternsSnapshotWithVersion() (uint64, []KnownPattern) {
+// knownPatternsSnapshot returns a deep copy of the active library. Unlike
+// the old snapshotWithVersion, it is only called on cache-rebuild paths —
+// the cache-hit path reads the version alone, without cloning the library
+// and its CustomPatterns maps on every Discover call.
+func knownPatternsSnapshot() []KnownPattern {
 	patternStateMu.RLock()
 	defer patternStateMu.RUnlock()
-	return patternStateVersion, cloneKnownPatterns(KnownPatterns)
+	return cloneKnownPatterns(KnownPatterns)
 }
 
 // KnownPatternsLibrarySnapshot returns a deep copy of the active source

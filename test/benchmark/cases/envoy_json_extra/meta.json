@@ -1,0 +1,6 @@
+{
+  "case_name": "envoy_json_extra",
+  "expected_grok": "\\{\\s*\"timestamp\"\\s*:\\s*%{QUOTEDSTRING:timestamp}\\s*,\\s*\"authority\"\\s*:\\s*%{QUOTEDSTRING:authority}\\s*,\\s*\"method\"\\s*:\\s*%{QUOTEDSTRING:method}\\s*,\\s*\"path\"\\s*:\\s*%{QUOTEDSTRING:path}\\s*,\\s*\"response_code\"\\s*:\\s*%{NUMBER:response_code}\\s*,\\s*\"duration\"\\s*:\\s*%{NUMBER:duration}\\s*\\}",
+  "expected_source": "structured:JSON Object",
+  "family": "envoy_json"
+}

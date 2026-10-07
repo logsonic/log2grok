@@ -1,0 +1,15 @@
+241010 130000 5000 INFO dfs.DataNode: Receiving block blk_0
+241010 130001 5001 INFO dfs.DataNode: Receiving block blk_1
+241010 130002 5002 INFO dfs.DataNode: Receiving block blk_2
+241010 130003 5003 INFO dfs.DataNode: Receiving block blk_3
+241010 130004 5004 INFO dfs.DataNode: Receiving block blk_4
+241010 130005 5005 INFO dfs.DataNode: Receiving block blk_5
+241010 130006 5006 INFO dfs.DataNode: Receiving block blk_6
+241010 130007 5007 INFO dfs.DataNode: Receiving block blk_7
+241010 130008 5008 INFO dfs.DataNode: Receiving block blk_8
+241010 130009 5009 INFO dfs.DataNode: Receiving block blk_9
+241010 130010 5010 INFO dfs.DataNode: Receiving block blk_10
+241010 130011 5011 INFO dfs.DataNode: Receiving block blk_11
+241010 130012 5012 INFO dfs.DataNode: Receiving block blk_12
+241010 130013 5013 INFO dfs.DataNode: Receiving block blk_13
+241010 130014 5014 INFO dfs.DataNode: Receiving block blk_14

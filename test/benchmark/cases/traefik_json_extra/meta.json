@@ -1,0 +1,6 @@
+{
+  "case_name": "traefik_json_extra",
+  "expected_grok": "\\{\\s*\"ClientAddr\"\\s*:\\s*%{QUOTEDSTRING:clientaddr}\\s*,\\s*\"RequestMethod\"\\s*:\\s*%{QUOTEDSTRING:requestmethod}\\s*,\\s*\"RequestPath\"\\s*:\\s*%{QUOTEDSTRING:requestpath}\\s*,\\s*\"DownstreamStatus\"\\s*:\\s*%{NUMBER:downstreamstatus}\\s*,\\s*\"Duration\"\\s*:\\s*%{NUMBER:duration}\\s*,\\s*\"OriginStatus\"\\s*:\\s*%{NUMBER:originstatus}\\s*\\}",
+  "expected_source": "structured:JSON Object",
+  "family": "traefik_json"
+}

@@ -1,0 +1,1 @@
+\{\s*"time"\s*:\s*%{QUOTEDSTRING:timestamp}\s*,\s*"type"\s*:\s*%{QUOTEDSTRING:type}\s*,\s*"record"\s*:\s*%{DATA:record}\s*\}

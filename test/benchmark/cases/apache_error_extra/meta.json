@@ -1,0 +1,6 @@
+{
+  "case_name": "apache_error_extra",
+  "expected_grok": "\\[%{APACHE_ERROR_TIME:timestamp}\\] \\[%{DATA:module}:%{LOGLEVEL:level}\\](?: \\[pid %{INT:pid}(?::tid %{INT:tid})?\\])?(?: \\[client %{IPORHOST:client_ip}:%{INT:client_port}\\])? %{GREEDYDATA:message}",
+  "expected_source": "library:Apache Error",
+  "family": "apache_error"
+}

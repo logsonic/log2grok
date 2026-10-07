@@ -1,0 +1,1 @@
+%{YEAR}/%{MONTHNUM2}/%{MONTHDAY2} %{TIME:time} %{NOTSPACE:file}:%{INT:line}: %{GREEDYDATA:message}

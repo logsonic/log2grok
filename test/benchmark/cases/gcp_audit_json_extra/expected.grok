@@ -1,0 +1,1 @@
+\{\s*"protoPayload"\s*:\s*%{DATA:protopayload}\s*,\s*"resource"\s*:\s*%{DATA:resource}\s*,\s*"timestamp"\s*:\s*%{QUOTEDSTRING:timestamp}\s*,\s*"severity"\s*:\s*%{QUOTEDSTRING:level}\s*\}

@@ -1,0 +1,6 @@
+{
+  "case_name": "celery_extra",
+  "expected_grok": "\\[%{TIMESTAMP_ISO8601:timestamp}: %{LOGLEVEL:level}/%{NOTSPACE:value}\\] Task tasks\\.add\\[%{INT:n}\\] succeeded in %{DURATION:duration}",
+  "expected_source": "inferred:Tiled",
+  "family": "celery"
+}

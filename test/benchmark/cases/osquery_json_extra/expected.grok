@@ -1,0 +1,1 @@
+\{\s*"name"\s*:\s*%{QUOTEDSTRING:logger}\s*,\s*"hostIdentifier"\s*:\s*%{QUOTEDSTRING:hostidentifier}\s*,\s*"calendarTime"\s*:\s*%{QUOTEDSTRING:calendartime}\s*,\s*"unixTime"\s*:\s*%{NUMBER:unixtime}\s*,\s*"action"\s*:\s*%{QUOTEDSTRING:action}\s*,\s*"columns"\s*:\s*%{DATA:columns}\s*\}

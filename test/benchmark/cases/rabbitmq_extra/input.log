@@ -1,0 +1,15 @@
+2024-10-10 13:00:00.000 [error] <0.0.0> connection 0 opened
+2024-10-10 13:00:01.001 [info] <0.1.0> connection 1 opened
+2024-10-10 13:00:02.002 [error] <0.2.0> connection 2 opened
+2024-10-10 13:00:03.003 [info] <0.3.0> connection 3 opened
+2024-10-10 13:00:04.004 [error] <0.4.0> connection 4 opened
+2024-10-10 13:00:05.005 [info] <0.5.0> connection 5 opened
+2024-10-10 13:00:06.006 [error] <0.6.0> connection 6 opened
+2024-10-10 13:00:07.007 [info] <0.7.0> connection 7 opened
+2024-10-10 13:00:08.008 [error] <0.8.0> connection 8 opened
+2024-10-10 13:00:09.009 [info] <0.9.0> connection 9 opened
+2024-10-10 13:00:10.010 [error] <0.10.0> connection 10 opened
+2024-10-10 13:00:11.011 [info] <0.11.0> connection 11 opened
+2024-10-10 13:00:12.012 [error] <0.12.0> connection 12 opened
+2024-10-10 13:00:13.013 [info] <0.13.0> connection 13 opened
+2024-10-10 13:00:14.014 [error] <0.14.0> connection 14 opened

@@ -1,0 +1,15 @@
+{"timestamp": "2024-10-10T13:00:00.000Z", "status": "error", "service": "api", "message": "request failed 0", "dd": {"trace_id": "0000000000000000", "span_id": "00000000"}}
+{"timestamp": "2024-10-11T13:01:07.001Z", "status": "error", "service": "api", "message": "request failed 1", "dd": {"trace_id": "0000000000000001", "span_id": "00000001"}}
+{"timestamp": "2024-10-12T13:02:14.002Z", "status": "error", "service": "api", "message": "request failed 2", "dd": {"trace_id": "0000000000000002", "span_id": "00000002"}}
+{"timestamp": "2024-10-13T13:03:21.003Z", "status": "error", "service": "api", "message": "request failed 3", "dd": {"trace_id": "0000000000000003", "span_id": "00000003"}}
+{"timestamp": "2024-10-14T13:04:28.004Z", "status": "error", "service": "api", "message": "request failed 4", "dd": {"trace_id": "0000000000000004", "span_id": "00000004"}}
+{"timestamp": "2024-10-15T13:05:35.005Z", "status": "error", "service": "api", "message": "request failed 5", "dd": {"trace_id": "0000000000000005", "span_id": "00000005"}}
+{"timestamp": "2024-10-16T13:06:42.006Z", "status": "error", "service": "api", "message": "request failed 6", "dd": {"trace_id": "0000000000000006", "span_id": "00000006"}}
+{"timestamp": "2024-10-17T13:07:49.007Z", "status": "error", "service": "api", "message": "request failed 7", "dd": {"trace_id": "0000000000000007", "span_id": "00000007"}}
+{"timestamp": "2024-10-18T13:08:56.008Z", "status": "error", "service": "api", "message": "request failed 8", "dd": {"trace_id": "0000000000000008", "span_id": "00000008"}}
+{"timestamp": "2024-10-19T13:09:03.009Z", "status": "error", "service": "api", "message": "request failed 9", "dd": {"trace_id": "0000000000000009", "span_id": "00000009"}}
+{"timestamp": "2024-10-20T13:10:10.010Z", "status": "error", "service": "api", "message": "request failed 10", "dd": {"trace_id": "000000000000000a", "span_id": "0000000a"}}
+{"timestamp": "2024-10-21T13:11:17.011Z", "status": "error", "service": "api", "message": "request failed 11", "dd": {"trace_id": "000000000000000b", "span_id": "0000000b"}}
+{"timestamp": "2024-10-22T13:12:24.012Z", "status": "error", "service": "api", "message": "request failed 12", "dd": {"trace_id": "000000000000000c", "span_id": "0000000c"}}
+{"timestamp": "2024-10-23T13:13:31.013Z", "status": "error", "service": "api", "message": "request failed 13", "dd": {"trace_id": "000000000000000d", "span_id": "0000000d"}}
+{"timestamp": "2024-10-24T13:14:38.014Z", "status": "error", "service": "api", "message": "request failed 14", "dd": {"trace_id": "000000000000000e", "span_id": "0000000e"}}

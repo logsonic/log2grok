@@ -58,6 +58,23 @@ var ErrEmptyInput = errors.New("log2grok: no non-empty input lines")
 //     ranking is preserved.
 var coverageEvalCap = 50000
 
+// stageAbortHook, if non-nil, is called with the lower stage's name each
+// time the coordinator aborts that stage because a higher-priority stage
+// auto-accepted. Test-only instrumentation; production code never sets it.
+// Unlike scanAbortHook (which fires only when an in-flight scan happens to
+// observe the cancellation), this records the coordinator's decision, so it
+// is deterministic.
+var stageAbortHook func(stage string)
+
+// abortStage cancels a lower-priority stage's scans and, in tests, reports
+// the decision. See the cancellation rule in Discover.
+func abortStage(ctl *scanCtl, name string) {
+	ctl.abort()
+	if stageAbortHook != nil {
+		stageAbortHook(name)
+	}
+}
+
 // Discover returns the single best Grok pattern for the input lines.
 func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 	considered, truncated := limitLines(lines, opts.MaxLines)
@@ -90,6 +107,10 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 
 	sample := chooseSample(full, 4096)
 
+	// The full input is no longer needed below; release it so a large input
+	// can be collected while the stages run.
+	dropFullInput(&full, &normalized, estimated)
+
 	// All three stages run concurrently. Each writes its diagnostics to a
 	// per-stage buffer so the merged output preserves stage-priority
 	// ordering regardless of completion order.
@@ -98,10 +119,12 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 	// not finish order: we read results in priority order and short-circuit
 	// the moment a higher-priority stage clears its threshold. Lower-priority
 	// goroutines still run to completion in the background — their channels
-	// are buffered (capacity 1) so they exit cleanly without being read.
+	// are buffered (capacity 1) so they exit cleanly without being read —
+	// but they are cancelled first so their in-flight scans stop early.
 	structuredCh := make(chan stageResult, 1)
 	libraryCh := make(chan stageResult, 1)
 	envelopeCh := make(chan stageResult, 1)
+	ctlStructured, ctlLibrary, ctlInferred := newScanCtl(), newScanCtl(), newScanCtl()
 
 	// Stage 1 — structured log formats such as (JSON / logfmt / CEF / W3C / CSV / TSV).
 	// Auto-accepts only when the candidate has at least one typed capture,
@@ -109,7 +132,7 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 	// it can't pre-empt the more informative library/inferred stages.
 	go func() {
 		var buf bytes.Buffer
-		dp := tryStructured(sample, evalSet, &buf)
+		dp := tryStructured(sample, evalSet, &buf, ctlStructured)
 		accept := dp != nil && dp.Coverage >= threshold && structuredHasTypedCapture(dp)
 		if accept {
 			fmt.Fprintf(&buf, "stage1 structured auto-accept: %s coverage=%.3f\n", dp.Source, dp.Coverage)
@@ -121,8 +144,8 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 	// the top candidates re-evaluated against the full input.
 	go func() {
 		var buf bytes.Buffer
-		dp := tryLibrary(sample, evalSet, threshold, &buf)
-		accept := dp != nil && dp.Coverage >= threshold
+		dp := tryLibrary(sample, evalSet, threshold, &buf, ctlLibrary)
+		accept := dp != nil && dp.Coverage >= threshold && librarySpecific(dp)
 		if accept {
 			fmt.Fprintf(&buf, "stage2 library auto-accept: %s coverage=%.3f\n", dp.Source, dp.Coverage)
 		}
@@ -138,7 +161,7 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 	// patterns keep priority.
 	go func() {
 		var buf bytes.Buffer
-		dp := pickBetter(tryTiling(sample, evalSet, &buf), tryTextEnvelope(sample, evalSet, &buf))
+		dp := pickBetter(tryTiling(sample, evalSet, &buf, ctlInferred), tryTextEnvelope(sample, evalSet, &buf, ctlInferred))
 		accept := dp != nil && dp.Coverage >= threshold
 		if accept {
 			fmt.Fprintf(&buf, "stage3 inferred auto-accept: %s coverage=%.3f\n", dp.Source, dp.Coverage)
@@ -147,16 +170,40 @@ func Discover(lines []string, opts Options) (*DiscoveredPattern, error) {
 	}()
 
 	// Read in priority order. Auto-accept of an earlier stage wins
-	// regardless of which goroutine actually finished first.
+	// regardless of which goroutine actually finished first. When a higher
+	// stage auto-accepts, the lower stages' ctl tokens are aborted so their
+	// in-flight scans stop early; their results are discarded.
 
 	structured := <-structuredCh
 	if structured.autoAccept {
+		abortStage(ctlLibrary, "library")
+		abortStage(ctlInferred, "inferred")
 		flushDiag(diag, structured.diag)
 		return finalize(structured.candidate, total, len(evalSet), estimated, truncated), nil
 	}
 
 	library := <-libraryCh
 	if library.autoAccept {
+		abortStage(ctlInferred, "inferred")
+		flushDiag(diag, structured.diag, library.diag)
+		return finalize(library.candidate, total, len(evalSet), estimated, truncated), nil
+	}
+
+	// A contentless structured candidate (logfmt blob, keyless JSON skeleton,
+	// or a CSV/TSV column split) that covers the input is a better single-shot
+	// answer than an inferred shape that overfits the sample's literals — and
+	// than a generic library fallback — but only when no *specific* library
+	// pattern matched (the auto-accept check above has ruled that out).
+	if structured.candidate != nil && structured.candidate.Coverage >= threshold {
+		abortStage(ctlInferred, "inferred")
+		flushDiag(diag, structured.diag, library.diag)
+		return finalize(structured.candidate, total, len(evalSet), estimated, truncated), nil
+	}
+
+	// Generic library fallbacks (e.g. "Generic Bracketed Timestamp") still beat
+	// inferred shapes; they just cannot pre-empt a concrete structural parse.
+	if library.candidate != nil && library.candidate.Coverage >= threshold {
+		abortStage(ctlInferred, "inferred")
 		flushDiag(diag, structured.diag, library.diag)
 		return finalize(library.candidate, total, len(evalSet), estimated, truncated), nil
 	}
@@ -276,23 +323,31 @@ func familyRank(family string) int {
 	}
 }
 
-// structuredHasTypedCapture decides whether the structured-stage
-// candidate is informative enough to auto-accept. CSV/TSV/W3C and other
-// schema-driven literal patterns intentionally have zero named captures
-// (column semantics are not recoverable from a delimiter); they remain
-// eligible. The single case we want to block is the keyless JSON
-// skeleton — `\{%{GREEDYDATA:json}\}` — which is emitted when no JSON
-// key crosses the common-frequency bar. That candidate matches every
-// JSON line at 100% coverage and would otherwise short-circuit the
-// later (more informative) stages.
+// structuredHasTypedCapture decides whether the structured-stage candidate is
+// specific enough to short-circuit the library stage: it must name at least
+// one field. Contentless parsers — logfmt's %{GREEDYDATA:kvpairs}, the keyless
+// JSON skeleton `\{%{GREEDYDATA:json}\}`, and pure CSV/TSV column splits —
+// yield to a specific curated library pattern (a comma-containing nginx error
+// line is not really CSV), then win via the contentless fallback in Discover.
 func structuredHasTypedCapture(dp *DiscoveredPattern) bool {
 	if dp == nil {
 		return false
 	}
-	if dp.Grok == `\{%{GREEDYDATA:json}\}` {
+	return typedCaptureCount(dp.Grok) > 0
+}
+
+// librarySpecific reports whether a curated library candidate is concrete
+// enough to auto-accept. Generic* fallbacks and patterns that name fewer than
+// two fields only compete with (rather than pre-empt) a contentless structural
+// parse such as CSV/TSV or a logfmt blob.
+func librarySpecific(dp *DiscoveredPattern) bool {
+	if dp == nil {
 		return false
 	}
-	return true
+	if strings.HasPrefix(dp.Source, "library:Generic ") {
+		return false
+	}
+	return typedCaptureCount(dp.Grok) >= 2
 }
 
 func typedCaptureCount(grok string) int {
@@ -314,6 +369,20 @@ type normalizedInput struct {
 	BlankCount   int
 }
 
+// dropFullInput releases the package's references to the full normalized
+// input once sampling is done. When the input exceeded coverageEvalCap,
+// evalSet and sample are independent copies, so the full slice (which can be
+// ~110 MB at 1M lines) is no longer needed and may be garbage-collected
+// rather than living until Discover returns. A no-op when evalSet aliases
+// full (estimated == false): the caller still owns that slice.
+func dropFullInput(full *[]string, normalized *normalizedInput, estimated bool) {
+	if !estimated {
+		return
+	}
+	*full = nil
+	normalized.MatchLines = nil
+}
+
 func normalizeLines(lines []string) normalizedInput {
 	out := normalizedInput{OriginalSize: len(lines)}
 	for i, line := range lines {
@@ -329,13 +398,14 @@ func normalizeLines(lines []string) normalizedInput {
 	return out
 }
 
-func tryStructured(sample, all []string, diag io.Writer) *DiscoveredPattern {
+func tryStructured(sample, all []string, diag io.Writer, ctl *scanCtl) *DiscoveredPattern {
+	js := newJSONSample(sample)
 	var best *DiscoveredPattern
 	for _, probe := range structuredProbes {
-		if !probe.Likely(sample) {
+		if !probe.Likely(js) {
 			continue
 		}
-		grok, source, ok := probe.Render(sample)
+		grok, source, ok := probe.Render(js)
 		if !ok {
 			continue
 		}
@@ -344,7 +414,7 @@ func tryStructured(sample, all []string, diag io.Writer) *DiscoveredPattern {
 			fmt.Fprintf(diag, "structured probe %s: compile failed: %v\n", probe.Name, err)
 			continue
 		}
-		matched := EvaluateCoverage(re, all)
+		matched := evaluateCoverageCtl(re, all, ctl)
 		dp := &DiscoveredPattern{
 			Source:       source,
 			SourceFamily: "structured",
@@ -359,7 +429,7 @@ func tryStructured(sample, all []string, diag io.Writer) *DiscoveredPattern {
 	return best
 }
 
-func tryLibrary(sample, all []string, threshold float64, diag io.Writer) *DiscoveredPattern {
+func tryLibrary(sample, all []string, threshold float64, diag io.Writer, ctl *scanCtl) *DiscoveredPattern {
 	candidates := scoreLibraryOnSample(sample)
 	candidates = keepTopCandidates(candidates, 12)
 
@@ -385,7 +455,7 @@ func tryLibrary(sample, all []string, threshold float64, diag io.Writer) *Discov
 		if best != nil {
 			floor = best.Matched
 		}
-		matched := evaluateCoverageWithFloor(c.Compiled, all, floor)
+		matched := evaluateCoverageWithFloorCtl(c.Compiled, all, floor, ctl)
 		result := &candidateResult{
 			Pattern:   c.Pattern,
 			Compiled:  c.Compiled,
@@ -442,6 +512,7 @@ func DiscoverTopK(lines []string, k int, opts Options) ([]*DiscoveredPattern, er
 	}
 
 	sample := chooseSample(full, 4096)
+	dropFullInput(&full, &normalized, estimated)
 
 	// Score every library pattern on the sample, then re-evaluate the
 	// top 24 on the eval set. We keep more candidates than the
@@ -473,12 +544,12 @@ func DiscoverTopK(lines []string, k int, opts Options) ([]*DiscoveredPattern, er
 
 	// If the library was thin, top up with a structured candidate.
 	if len(out) < k {
-		if s := tryStructured(sample, evalSet, io.Discard); s != nil {
+		if s := tryStructured(sample, evalSet, io.Discard, nil); s != nil {
 			out = append(out, finalize(s, total, len(evalSet), estimated, truncated))
 		}
 	}
 	if len(out) < k {
-		if e := pickBetter(tryTiling(sample, evalSet, io.Discard), tryTextEnvelope(sample, evalSet, io.Discard)); e != nil {
+		if e := pickBetter(tryTiling(sample, evalSet, io.Discard, nil), tryTextEnvelope(sample, evalSet, io.Discard, nil)); e != nil {
 			out = append(out, finalize(e, total, len(evalSet), estimated, truncated))
 		}
 	}

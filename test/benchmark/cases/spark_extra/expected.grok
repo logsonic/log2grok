@@ -1,0 +1,1 @@
+%{INT:year}/%{INT:month}/%{INT:day} %{TIME:time} %{LOGLEVEL:level} %{NOTSPACE:logger}: %{GREEDYDATA:message}
